@@ -10,7 +10,11 @@ BT_MAC_OFFSET = 0x00
 BT_TRAILER_SIG = bytes.fromhex('60002310000007000000050703040000')
 BT_TRAILER_SIG_OFFSET = 0x06
 
-WIFI_HDR = bytes.fromhex('01000800')
+WIFI_HDR_VARIANTS = (
+    bytes.fromhex('01000800'),
+    bytes.fromhex('01000900'),
+)
+WIFI_HDR_LEN = 4
 WIFI_MAC_OFFSET = 0x04
 
 TRAILER_MAGIC = 0xAA
@@ -62,9 +66,10 @@ def patch_bt(data, new_mac):
 def patch_wifi(data, new_mac):
     if len(data) != WIFI_FILE_SIZE:
         die(f"WIFI size is {len(data)} bytes, expected {WIFI_FILE_SIZE}. Did you pass the BT_Addr file by mistake? (BT_Addr is {BT_FILE_SIZE} bytes)")
-    got = data[:len(WIFI_HDR)]
-    if got != WIFI_HDR:
-        die(f"WIFI header magic mismatch: got {got.hex()}, expected {WIFI_HDR.hex()}. File may be corrupted or not a real WIFI.")
+    got = data[:WIFI_HDR_LEN]
+    if got not in WIFI_HDR_VARIANTS:
+        expected = ' or '.join(h.hex() for h in WIFI_HDR_VARIANTS)
+        die(f"WIFI header magic mismatch: got {got.hex()}, expected {expected}. File may be corrupted or not a real WIFI.")
     out = bytearray(data)
     out[WIFI_MAC_OFFSET:WIFI_MAC_OFFSET + 6] = new_mac
     out[-2] = TRAILER_MAGIC
@@ -83,7 +88,7 @@ def read_bt_mac(data):
 def read_wifi_mac(data):
     if len(data) != WIFI_FILE_SIZE:
         return None
-    if data[:len(WIFI_HDR)] != WIFI_HDR:
+    if data[:WIFI_HDR_LEN] not in WIFI_HDR_VARIANTS:
         return None
     return data[WIFI_MAC_OFFSET:WIFI_MAC_OFFSET + 6]
 
@@ -105,18 +110,19 @@ def find_bt_copies(img):
 
 
 def find_wifi_copies(img):
-    out = []
-    pos = 0
-    while True:
-        i = img.find(WIFI_HDR, pos)
-        if i < 0:
-            break
-        if i + WIFI_FILE_SIZE <= len(img):
-            blob = img[i:i + WIFI_FILE_SIZE]
-            if trailer_valid(blob):
-                out.append((i, blob))
-        pos = i + 1
-    return out
+    found = {}
+    for hdr in WIFI_HDR_VARIANTS:
+        pos = 0
+        while True:
+            i = img.find(hdr, pos)
+            if i < 0:
+                break
+            if i + WIFI_FILE_SIZE <= len(img):
+                blob = img[i:i + WIFI_FILE_SIZE]
+                if trailer_valid(blob):
+                    found[i] = blob
+            pos = i + 1
+    return [(off, found[off]) for off in sorted(found)]
 
 
 def is_partition_image(path):
@@ -179,7 +185,8 @@ def cmd_read(args):
     if sz == BT_FILE_SIZE:
         die(f"file is {sz} bytes (BT_Addr-shaped) but the trailer signature at offset {BT_TRAILER_SIG_OFFSET:#x} does not match {BT_TRAILER_SIG.hex()} — file may be corrupted or not a real BT_Addr")
     if sz == WIFI_FILE_SIZE:
-        die(f"file is {sz} bytes (WIFI-shaped) but the header magic does not match {WIFI_HDR.hex()} — file may be corrupted or not a real WIFI")
+        expected = ' or '.join(h.hex() for h in WIFI_HDR_VARIANTS)
+        die(f"file is {sz} bytes (WIFI-shaped) but the header magic does not match {expected} — file may be corrupted or not a real WIFI")
     die(f"file is {sz} bytes; expected {BT_FILE_SIZE} (BT_Addr), {WIFI_FILE_SIZE} (WIFI), or > 1 MiB (partition image)")
 
 
@@ -239,7 +246,8 @@ def cmd_write(args):
         if bt_mac is not None and bt_count == 0:
             die(f"no valid BT_Addr record found in {in_path} ({sz} bytes scanned). Looked for {BT_TRAILER_SIG.hex()} at offset 6 of a 440-byte record with valid aa+checksum trailer.")
         if wifi_mac is not None and wifi_count == 0:
-            die(f"no valid WIFI record found in {in_path} ({sz} bytes scanned). Looked for header {WIFI_HDR.hex()} at the start of a 2050-byte record with valid aa+checksum trailer.")
+            expected = ' or '.join(h.hex() for h in WIFI_HDR_VARIANTS)
+            die(f"no valid WIFI record found in {in_path} ({sz} bytes scanned). Looked for header {expected} at the start of a 2050-byte record with valid aa+checksum trailer.")
         write_output(out_path, bytes(out))
         msg = []
         if bt_mac is not None:

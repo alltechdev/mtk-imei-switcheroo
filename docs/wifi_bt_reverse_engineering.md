@@ -118,7 +118,7 @@ offset  size   contents
                                                           total = 0x802 = 2050 bytes
 ```
 
-The 4-byte header `01 00 08 00` is what `mac_tool.py` uses to recognize a WIFI file inside a partition image. It appears at the start of every populated WIFI record copy on this device, including the stock factory layout.
+The 4-byte header `01 00 08 00` is what `mac_tool.py` uses to recognize a WIFI file inside a partition image **on F21 Pro and TIQ M5**. F25 uses `01 00 09 00` for the same role (one byte different at offset 2, otherwise identical layout); see [`f25_offline_analysis.md`](f25_offline_analysis.md). `mac_tool.py`'s `WIFI_HDR_VARIANTS` tuple accepts both.
 
 ## Live MAC vs on-disk MAC
 
@@ -616,4 +616,8 @@ Pull commands use the binary-safe `cp via su /sdcard + adb pull` for filesystem 
 
   An earlier capture of `wpa_supplicant: p2p0: Own MAC address: <patched>` in logcat looked like a runtime confirmation but didn't reproduce on subsequent boots — `p2p0` is also `addr_assign_type=3` on this build, so its userspace-visible MAC is randomized too. The reliable runtime read is via `wlan0/address` with `MacRandomizationSetting=0`, as documented above; ignore the earlier p2p0 line.
 
-- **Other MT67xx devices (F25, TIQ M5, …)** — **not yet tested for WiFi/BT MAC patching.** The format constants in `mac_tool.py` (440-byte BT_Addr file, 2050-byte WIFI file, the 16-byte BT_Addr trailer fingerprint, the `01 00 08 00` WIFI header, the 2-byte `aa CC` trailer) and the `NVM_ComputeCheckNo` algorithm match against the on-device `libnvram.so` on F21 Pro only. Whether they're identical across the rest of the MT67xx product line is plausible (MTK MOLY ships a single NVRAM library across these chipsets) but unverified. Treat any other device's behavior as unknown until run end-to-end on hardware. Re-running the disassembly and validation steps above against that device's `/vendor/lib64/libnvram.so` and a known-good `BT_Addr` / `WIFI` file is the first step.
+- **TIQ M5 (offline only)** — partition dumps analyzed in [`tiq_m5_offline_analysis.md`](tiq_m5_offline_analysis.md). BT_Addr format / WIFI format / trailer-checksum algorithm all match F21 Pro byte-for-byte; `mac_tool.py` round-trips full nvdata.bin byte-identically. Live-device verification not yet performed.
+
+- **F25 (offline only)** — partition dumps analyzed in [`f25_offline_analysis.md`](f25_offline_analysis.md). BT_Addr format identical to F21 Pro. WIFI format uses **header `01 00 09 00` instead of `01 00 08 00`** at offset 2; trailer-checksum algorithm is the same. `mac_tool.py` was extended (`WIFI_HDR_VARIANTS = (b'\x01\x00\x08\x00', b'\x01\x00\x09\x00')`) to accept both; full nvdata.bin round-trip is byte-identical. Live-device verification not yet performed. The per-device byte at offset 2 (08 vs 09) is what changes across the WiFi-firmware family — the on-disk format and AP-side validation logic are otherwise the same.
+
+- **Other MT67xx / MT67/MT68 devices not in the list above** — **not yet tested for WiFi/BT MAC patching.** Re-running the disassembly and validation steps above against the new device's `/vendor/lib64/libnvram.so` and a known-good `BT_Addr` / `WIFI` file is the first step. If the WIFI header at offset 2 is a value other than 08 or 09, add it to `WIFI_HDR_VARIANTS` after confirming the trailer-checksum still validates on the new sample.

@@ -25,8 +25,11 @@ BT_MAC_OFFSET         = 0x00
 BT_TRAILER_SIG        = bytes.fromhex('60002310000007000000050703040000')
 BT_TRAILER_SIG_OFFSET = 0x06
 
-WIFI_HDR        = bytes.fromhex('01000800')
-WIFI_HDR_OFFSET = 0x00
+WIFI_HDR_VARIANTS = (
+    bytes.fromhex('01000800'),    # F21 Pro, TIQ M5, F30 stock
+    bytes.fromhex('01000900'),    # F25
+)
+WIFI_HDR_LEN    = 4
 WIFI_MAC_OFFSET = 0x04
 
 TRAILER_MAGIC = 0xAA
@@ -37,7 +40,7 @@ TRAILER_MAGIC = 0xAA
 | `BT_FILE_SIZE` / `WIFI_FILE_SIZE` | The exact byte sizes; both a validity check and the slice stride for partition-image scans. |
 | `BT_MAC_OFFSET` / `WIFI_MAC_OFFSET` | Where the 6-byte MAC lives in each file — `[0:6]` for BT_Addr, `[4:10]` for WIFI (behind the 4-byte WIFI header). |
 | `BT_TRAILER_SIG` | The 16-byte fixed fingerprint that follows the BT MAC (`60 00 23 10 00 00 07 00 00 00 05 07 03 04 00 00`). Does not appear elsewhere in nvdata, so it's an unambiguous signature for finding BT_Addr copies in a partition image. |
-| `WIFI_HDR` | The 4-byte fixed header (`01 00 08 00`) at the start of every WIFI file. Same role as the BT trailer fingerprint — a signature for finding WIFI copies. |
+| `WIFI_HDR_VARIANTS` | The set of accepted 4-byte WIFI headers. Both observed values share the prefix `01 00 …. 00` and differ only in the byte at offset 2: `08` for F21 Pro / TIQ M5 / F30 stock, `09` for F25. The trailer-checksum algorithm is identical across both variants. New device families with a different byte at offset 2 should add their value to this tuple after the format is verified offline (round-trip identity test). |
 | `TRAILER_MAGIC` | The constant `0xaa` byte that prefixes the 1-byte trailer checksum. Verified by `NVM_CheckFile` in `libnvram.so`. |
 
 See [`wifi_bt_reverse_engineering.md` § File layouts](wifi_bt_reverse_engineering.md#file-layouts) for the byte-by-byte map of each file.
@@ -73,7 +76,7 @@ Returns `True` iff the file's 2-byte trailer is `(0xaa, compute_checksum(data))`
 Both:
 
 1. Validate the input is the expected size (440 or 2050).
-2. Validate the relevant signature (BT_TRAILER_SIG at offset 6 for BT, WIFI_HDR at offset 0 for WIFI). On mismatch, die — the file is structurally not what we expect, and refusing to patch is safer than blindly editing.
+2. Validate the relevant signature (BT_TRAILER_SIG at offset 6 for BT, any of `WIFI_HDR_VARIANTS` at offset 0 for WIFI). On mismatch, die — the file is structurally not what we expect, and refusing to patch is safer than blindly editing.
 3. Splice the new MAC at the slot's offset (`[0:6]` for BT, `[4:10]` for WIFI).
 4. Set `data[-2] = 0xaa`, `data[-1] = compute_checksum(data)`.
 5. Return the new bytes.
@@ -88,7 +91,7 @@ Inverse: validate size and signature, return the 6 MAC bytes (or `None` if valid
 
 ### `find_bt_copies(img)` / `find_wifi_copies(img)`
 
-Walk `img` for every occurrence of the relevant signature (`BT_TRAILER_SIG` or `WIFI_HDR`), reconstruct the candidate 440- or 2050-byte slice, and check `trailer_valid`. Return `[(offset, blob), ...]` for every valid hit. A "hit" requires *both* the signature *and* a self-consistent `aa CC` trailer — that's why a partition image with stale fragments doesn't trip the patcher.
+Walk `img` for every occurrence of the relevant signature (`BT_TRAILER_SIG` for BT; any of `WIFI_HDR_VARIANTS` for WIFI), reconstruct the candidate 440- or 2050-byte slice, and check `trailer_valid`. Return `[(offset, blob), ...]` for every valid hit, sorted by offset, with no duplicates if multiple WIFI variants match the same offset (impossible in practice — the variant bytes differ — but the dedup is in place anyway). A "hit" requires *both* the signature *and* a self-consistent `aa CC` trailer — that's why a partition image with stale fragments doesn't trip the patcher.
 
 On the live F21 Pro `nvram` partition (BinRegion mirror, 64 MiB), each finder returns exactly **one** copy each (BT at offset `0x2003c`, WIFI at offset `0x201f4`). On larger images that contain multiple fragments (ext4 journal/COW remnants from an extracted `nvdata` partition) the finders return one entry per valid copy, and `cmd_write` patches all of them in place.
 

@@ -138,5 +138,38 @@ assert_stdout "sig with no room for full record -> not found" "(not found"  pyth
 assert_stderr "partition with no BT records, --bt requested" "no valid BT_Addr record" python3 "$TOOL" write "$EDGE/sig_at_end.img" --bt 02:11:22:33:44:55 -o "$EDGE/x.img"
 
 echo ""
+echo "== Multi-device samples (run if present) =="
+M5_NVDATA="$ROOT/tmp/tiqm5/nvdata.bin"
+F25_NVDATA="$ROOT/tmp/f25/nvdata.bin"
+
+extract_mac_for() {
+    local img="$1" kind="$2"
+    python3 "$TOOL" read "$img" | awk -v k="$kind" '$0 ~ k {print $NF}' | head -1
+}
+
+if [ -f "$M5_NVDATA" ]; then
+    assert_stdout "TIQ M5 nvdata read finds BT and WIFI" "0x1000000" python3 "$TOOL" read "$M5_NVDATA"
+    M5_BT_ORIG=$(extract_mac_for "$M5_NVDATA" 'BT_Addr')
+    M5_WF_ORIG=$(extract_mac_for "$M5_NVDATA" 'WIFI MAC')
+    python3 "$TOOL" write "$M5_NVDATA" --bt 02:11:22:33:44:55 --wifi 02:11:22:33:44:66 -o "$EDGE/m5_a.img" >/dev/null
+    python3 "$TOOL" write "$EDGE/m5_a.img" --bt "$M5_BT_ORIG" --wifi "$M5_WF_ORIG" -o "$EDGE/m5_b.img" >/dev/null
+    if cmp -s "$M5_NVDATA" "$EDGE/m5_b.img"; then echo "  PASS   TIQ M5 nvdata full round-trip byte-identical (BT=$M5_BT_ORIG WIFI=$M5_WF_ORIG)"; PASS=$((PASS+1)); else echo "  FAIL   TIQ M5 round-trip differs"; FAIL=$((FAIL+1)); fi
+else
+    echo "  SKIP   TIQ M5 (no $M5_NVDATA)"
+fi
+
+if [ -f "$F25_NVDATA" ]; then
+    assert_stdout "F25 nvdata read finds BT (header 01 00 08 00 path)" "BT_Addr"   python3 "$TOOL" read "$F25_NVDATA"
+    assert_stdout "F25 nvdata read finds WIFI (header 01 00 09 00 path)" "WIFI MAC" python3 "$TOOL" read "$F25_NVDATA"
+    F25_BT_ORIG=$(extract_mac_for "$F25_NVDATA" 'BT_Addr')
+    F25_WF_ORIG=$(extract_mac_for "$F25_NVDATA" 'WIFI MAC')
+    python3 "$TOOL" write "$F25_NVDATA" --bt 02:11:22:33:44:55 --wifi 02:11:22:33:44:66 -o "$EDGE/f25_a.img" >/dev/null
+    python3 "$TOOL" write "$EDGE/f25_a.img" --bt "$F25_BT_ORIG" --wifi "$F25_WF_ORIG" -o "$EDGE/f25_b.img" >/dev/null
+    if cmp -s "$F25_NVDATA" "$EDGE/f25_b.img"; then echo "  PASS   F25 nvdata full round-trip byte-identical (BT=$F25_BT_ORIG WIFI=$F25_WF_ORIG)"; PASS=$((PASS+1)); else echo "  FAIL   F25 round-trip differs"; FAIL=$((FAIL+1)); fi
+else
+    echo "  SKIP   F25 (no $F25_NVDATA)"
+fi
+
+echo ""
 echo "== Total: $PASS pass / $FAIL fail =="
 [ "$FAIL" -eq 0 ] || exit 1
