@@ -485,9 +485,11 @@ Every step above can be independently reproduced with:
 4. Python 3.6+ with `pycryptodome` and `hashlib` (stdlib) to decrypt and test checksum hypotheses
 5. `adb reboot` to verify the modem accepts or rejects the written IMEI
 
-## Cross-device validation (F25, firmware-only)
+## Cross-device validation (F25)
 
-The walkthrough above was conducted on a live F21 Pro (single-SIM). The same key, slot offsets, and checksum were independently re-validated against a stock **DuoQin F25** (dual-SIM) firmware ZIP — no F25 hardware was used.
+The walkthrough above was conducted on a live F21 Pro (single-SIM). The same key, slot offsets, and checksum were independently re-validated first against a stock **DuoQin F25** (dual-SIM) firmware ZIP, then live on F25 hardware via this repo's `live_patch.sh` and via the [`flipphoneguy/mtk-imei-switcheroo-app`](https://github.com/flipphoneguy/mtk-imei-switcheroo-app) Java port — patched IMEIs persist across reboot and the modem accepts the patched bytes at runtime. **F25 hardware testing is performed by the port author (also the F25 device tester); we do not have F25 hardware on this side.**
+
+For the MAC-side per-device analysis on F25 (BT_Addr / WIFI signatures, the `01 00 09 00` WIFI header variant, AllMap structure, modem family) see [`f25_offline_analysis.md`](f25_offline_analysis.md).
 
 ### What was checked against the F25 firmware
 
@@ -499,11 +501,13 @@ The walkthrough above was conducted on a live F21 Pro (single-SIM). The same key
 
 4. **Round-trip through `imei_tool.py`.** `imei_tool.py write nvdata.bin <new_imei> -s 1` and `-s 2` against the F25 image: read-back via `imei_tool.py read` returns the new IMEIs in the corresponding slots, the other slot's bytes are byte-identical to the original, and `_patch_all_copies` updates the two header-matching live copies while leaving the factory backup at `0x1c04000` alone (its differing `[0x2a:0x2c]` header bytes cause the header-equality matcher to skip it — by analogy with the F21 Pro's factory-rollback handler this is desirable, but rollback behavior on F25 itself has not been observed).
 
+### Live hardware confirmation (subsequent)
+
+After the initial firmware-only analysis above, F25 hardware was tested via this repo's `live_patch.sh` and via the Java app port. Patched IMEIs persisted across reboot and the modem accepted the patched bytes at runtime. F25 hardware testing was performed by the port author (also the F25 tester); we do not have F25 hardware here. The original "no live F25 hardware" caveat has been resolved upstream.
+
 ### What was *not* checked
 
-- **No live F25 hardware.** No `adb`/`fastboot`/reboot test was performed on a real F25.
-- **No bad-checksum behavior on F25.** The modem-side rollback-vs-ECC-mode response confirmed on the F21 Pro (Step 3 cases 2 and 3 above) has not been observed on F25.
-The cross-device evidence is strong enough to say `imei_tool.py -s 2` produces modem-acceptable bytes for the F25 *firmware* layout. Whether the F25 modem's runtime actually accepts a patched dual-SIM `LD0B_001` and brings the radio up has not been tested directly on F25 hardware; the closest hardware evidence is F21 Pro slot 1 (single-SIM) and TIQ M5 both slots (dual-SIM, see next section), where the same crypto / format / checksum produce modem-acceptable bytes that survive boot. The TIQ M5 result *is* the cross-validation against another dual-SIM MT67xx device that this section originally noted as missing.
+- **No bad-checksum behavior on F25.** The modem-side rollback-vs-ECC-mode response confirmed on the F21 Pro (Step 3 cases 2 and 3 above) has not been deliberately reproduced on F25; the F25 hardware tests only exercised the happy-path (valid checksum, accepted by modem). The next section (Hardware validation, TIQ M5) does cover the bad-checksum path on **that** device, and the response there is different from F21 Pro: F21 Pro silently restores from factory backup; TIQ M5 deletes the entire `LD0B_001` file. Whether F25 follows F21 Pro's rollback behavior or TIQ M5's delete behavior on a bad checksum is not yet known.
 
 ## Hardware validation (TIQ M5, dual-SIM)
 
