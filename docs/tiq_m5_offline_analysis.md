@@ -38,7 +38,7 @@ WIFI MAC (1 copies, first @ 0x201f4): 00:00:00:00:00:00
 
 The fact that the tool finds anything at all is the first cross-product confirmation: `find_bt_copies` and `find_wifi_copies` (which require the BT_Addr 16-byte trailer fingerprint at offset 6 *and* a self-consistent `aa CC` trailer where `CC` matches the F21 Pro algorithm) successfully match against TIQ M5 records. If the algorithm or signature differed, no copies would have been reported.
 
-The BT MAC `4e:3b:46:90:34:7c` is real and consistent across all 4 nvdata copies and the nvram copy. The WIFI MAC field is all-zero in every copy on this dump — flagged as the [open question](#open-question) below.
+The BT MAC `4e:3b:46:90:34:7c` is real and consistent across all 4 nvdata copies and the nvram copy. The WIFI MAC field is all-zero in every copy on this dump — flagged as the [open question](#open-question-resolved) below.
 
 The 4 BT_Addr offsets in `nvdata.bin`:
 
@@ -73,6 +73,26 @@ WIFI    first copy: magic=0xaa, stored_cs=0x27, computed_cs=0x27, match=True
 `mac_tool.compute_checksum` (the position-alternating ADD-on-even / XOR-on-odd algorithm recovered by disassembling F21 Pro's `libnvram.so` — see [`wifi_bt_reverse_engineering.md`](wifi_bt_reverse_engineering.md)) produces the byte-exact stored trailer for the TIQ M5 records. Same is true for every other copy in `nvdata.bin` and `nvram.bin` (the `find_*_copies` step in Step 1 only returns copies whose `trailer_valid` predicate passes).
 
 This is direct evidence the trailer algorithm is the same on TIQ M5 as on F21 Pro. If TIQ M5 used a different algorithm, the tool would either reject those copies (no `aa CC` match) or compute a different checksum value than the one stored.
+
+### Disassembly cross-check
+
+Pulling `/vendor/lib64/libnvram.so` from M5 and F21 Pro and disassembling `_Z18NVM_ComputeCheckNoPKcPcb` confirms instruction-level equivalence of the loop body — same opcodes in the same order, same register roles (only the loop-counter register differs: F21 Pro uses `w23`, M5 uses `w22`):
+
+```
+F21 Pro libnvram.so @ 0x126c0     M5 libnvram.so @ 0x16310
+   ldurb w8, [x29, #-0xc]            ldrb  w8, [sp, #0x4]      ; read 1 byte → w8
+   tst   w24, #0x1                   tst   w24, #0x1           ; test parity bit
+   eor   w24, w24, #0x1               eor   w24, w24, #0x1      ; toggle parity for next iter
+   eor   w9, w21, w8                 eor   w9, w21, w8         ; cs ^ byte (odd-index path)
+   add   w8, w21, w8                 add   w8, w21, w8         ; cs + byte (even-index path)
+   csel  w21, w9, w8, ne             csel  w21, w9, w8, ne     ; pick XOR if parity_was_odd, else ADD
+   subs  w23, w23, #0x1              subs  w22, w22, #0x1      ; decrement counter
+   b.ne  loop                        b.ne  loop
+```
+
+Same `csel ... ne` selecting between the XOR result (`w9 = cs ^ byte`) and the ADD result (`w8 = cs + byte`) based on parity, same `eor wN, wN, #0x1` toggle on the parity-tracking register. M5's daemon's `NVM_CheckFile` therefore validates files against the exact same byte-level checksum that `mac_tool.compute_checksum` produces. (The "exclude_last_2" handling earlier in the function — which selects `size - 2` vs `size` for the loop count via `csel wN, w9, w8, ne` under `tst w21, #0x1` — is also identical between the two builds.)
+
+This independently confirms what Step 2's empirical check above already showed: `mac_tool.py write` produces files M5's daemon validates and accepts (no rollback). The WiFi runtime quirk on M5 (see [`tiq_m5_mac_live_findings.md`](tiq_m5_mac_live_findings.md)) is therefore **not** a daemon-level disagreement — it is downstream of the daemon, in the chipset firmware's on-die cache that Android's WiFi HAL queries via NL80211 vendor command.
 
 ## Step 3 — Round-trip identity through `mac_tool.py`
 
