@@ -728,20 +728,22 @@ If instead a reboot loop or ECC mode occurs, it means the modem ignores the all-
 
 ---
 
-## Preferred bypass — modem downgrade to MIUI 12.5 (Redmi Note 8 2021 / biloba)
+## Modem downgrade attempt — MIUI 12.5 (Redmi Note 8 2021 / biloba) — FAILED
 
 A three-way comparison of modem images for the **Redmi Note 8 2021** (biloba, MT6769) reveals a clean bypass that requires no nvdata/nvram surgery: flash the MIUI 12.5 modem, which predates the CSSD enforcement layer entirely.
 
 ### Three-way modem comparison
 
-| Firmware | Modem SDK | `checkNVdataforNewBoardId` | `is_need_enable_critical_data_check` | CSSD enforced |
-|---|---|---|---|---|
-| MIUI 12.5 Global `V12.5.2.0.RCUMIXM` | `LR12A.R3.MP.V145.8.P22` | **ABSENT** | **ABSENT** | **NO** |
-| MIUI 12.5 EU `V12.5.1.0.RCUEUXM` | `LR12A.R3.MP.V145.8.P22` | **ABSENT** | **ABSENT** | **NO** |
-| Tester device `V13.0.7.0.SCUEUXM` | `LR12A.R3.MP.V145.9.P40` | present | present | YES |
-| Community dump (nvdata/nvram source) | `LR12A.R3.MP.V145.9.P29` | present | present | YES |
+| Firmware | Modem SDK | `checkNVdataforNewBoardId` | `is_need_enable_critical_data_check` | CSSD enforced | Live test |
+|---|---|---|---|---|---|
+| MIUI 12.5 Global `V12.5.2.0.RCUMIXM` | `LR12A.R3.MP.V145.8.P22` | absent | absent (has `is_enable`) | **YES (MP)** | **FAIL — IMEI rejected** |
+| MIUI 12.5 EU `V12.5.1.0.RCUEUXM` | `LR12A.R3.MP.V145.8.P22` | absent | absent (has `is_enable`) | YES (MP) | not tested |
+| Tester device `V13.0.7.0.SCUEUXM` | `LR12A.R3.MP.V145.9.P40` | present | present | YES | FAIL — baseline |
+| Community dump (nvdata/nvram source) | `LR12A.R3.MP.V145.9.P29` | present | present | YES | — |
 
-The enforcement was added between `V145.8` (MIUI 12.5) and `V145.9` (MIUI 13+). Global and EU 12.5 builds carry the identical modem SDK version (`V145.8.P22`) and differ only in the DRDI container packing (8 KB size delta, 64-byte string offset shift) — both are equivalent for this purpose.
+**Live test result (tester, 2026-10-02):** Flashed V145.8 modem onto biloba. MAC patching accepted (unchanged behavior). IMEI patching failed — same outcome as V145.9. The modem downgrade does **not** bypass CSSD enforcement for a biloba device with a non-default IMEI.
+
+Global and EU 12.5 builds carry the identical modem SDK version (`V145.8.P22`) and differ only in the DRDI container packing (8 KB size delta, 64-byte string offset shift) — both are equivalent for this purpose.
 
 **Key observation:** `CSSD_000` is absent as a string from all four modem builds. The modem accesses signed IMEI data by NVRAM LID, not by filename. The presence of `checkNVdataforNewBoardId` and `is_need_enable_critical_data_check` is the correct indicator of enforcement, not the `CSSD_000` filename.
 
@@ -841,30 +843,26 @@ V145.8 has a **complete** `custom_nvram_read_and_check_signed_critical_data` imp
 **Path A — wiped/default IMEI (confirmed from strings, return value = 0):**
 Any scenario that leaves `LD0B_001` in its unprovisioned state (IMEI BCD = `FF FF FF FF FF FF FF FF`) — factory reset, bad flash, or deliberate IMEI wipe — causes V145.8 to log `"imei is default value, bypass check"` at `0x014f8640` and return 0 (SUCCESS) without reading CSSD_000 at all. This path is present in both V145.8 and V145.9 and its return value is unambiguous from the log string.
 
-**Path B — missing CSSD with valid IMEI (return value unconfirmed):**
-If `LD0B_001` holds a valid non-default IMEI but CSSD_000 is absent, V145.8 hits `"read critical data fail"` at `0x014f8698`. Whether this returns 0 (permissive — old modem skips enforcement entirely) or non-zero (strict — same outcome as V145.9) could not be determined by binary disassembly. If Path B returns 0, the old modem bypasses for any biloba regardless of IMEI state. If Path B returns non-zero, only Path A (devices with wiped IMEI) benefits from the modem downgrade. **The tester result resolves this.**
+**Path B — missing CSSD with valid IMEI (confirmed non-zero, live test 2026-10-02):**
+If `LD0B_001` holds a valid non-default IMEI but CSSD_000 is absent, V145.8 hits `"read critical data fail"` at `0x014f8698` and returns **non-zero (failure)**. Live hardware test with V145.8 modem on biloba: MAC patching accepted, IMEI patching rejected — identical outcome to V145.9. The modem downgrade does not help for a device with a real IMEI.
 
-The structural difference V145.9 introduced for biloba specifically: `checkNVdataforNewBoardId` was added and `biloba` was placed in its target device list, creating a second enforcement gate that runs regardless of hwlevel. V145.8 has no equivalent — it only applies the hwlevel gate and has no knowledge of biloba as a special product requiring CSSD.
+Path A (wiped IMEI → all-FF default → bypass) was not explicitly tested and may still return 0, but it is not a usable IMEI-change path: a device with all-FF IMEI has no IMEI, and patching it to a real value then triggers the CSSD check on the next boot — landing back in Path B.
 
-### Flash procedure
+The structural difference V145.9 introduced for biloba (adding `checkNVdataforNewBoardId` and the explicit product name list) is therefore a secondary gate on top of existing enforcement, not the source of the enforcement itself. V145.8 already enforces CSSD for MP biloba via the hwlevel gate alone.
 
-Flash only the `md1img` partition. `nvdata` and `nvram` do not need to be touched.
+### Test procedure and result
 
-```bash
-# Power off device, connect USB (do not power on)
-python3 mtkclient/mtk.py w md1img md1img_global_V12.5.2.0.RCUMIXM.img
-```
+Flashed `md1img` partition from `md1img_global_V12.5.2.0.RCUMIXM.img` via mtkclient, booted the device. SBC accepted the image (official Xiaomi signing chain valid for biloba). Voice/data functional (CCCI interface compatible across MIUI versions). Then patched `LD0B_001` via `live_patch.sh`.
 
-After flashing, boot the device. The MIUI 12.5 modem accepts any valid `LD0B_001` without checking the signed critical data. Patch `LD0B_001` with `imei_tool.py` as on MT6761:
+**Result: IMEI patch rejected.** After reboot the modem rolled back the IMEI to its factory value. MAC address patching continued to work normally (MAC uses NVM_ComputeCheckNo only, no CSSD). The outcome is byte-for-byte identical to the V145.9 baseline.
 
-```bash
-python3 imei_tool.py write nvdata.bin 350000000000000 -o nvdata_patched.bin
-# or patch on-device:
-python3 live_patch.sh 350000000000000
-```
+**Conclusion:** the modem downgrade does not provide a bypass for IMEI patching on biloba. V145.8 enforces CSSD for MP-hwlevel devices via `is_enable_critical_data_check` → TRUE → CSSD required. The absence of `checkNVdataforNewBoardId` and the `is_need_enable_critical_data_check` rename are V145.9 additions on top of existing enforcement, not the origin of it.
 
-### Caveats
+### Remaining paths
 
-- **SBC (Secure Boot Check):** EFuse `0x5 = 01000000` confirms SBC is enabled. The preloader will verify the modem image signature before booting it. Since `V12.5.2.0.RCUMIXM` is official Xiaomi firmware for biloba, its signing chain is valid and the preloader will accept it.
-- **Android ↔ modem compatibility:** The modem communicates with Android via the CCCI interface. MIUI 13 Android running with a MIUI 12.5 modem may trigger version-mismatch warnings in the modem log, but biloba devices in the community have been reported to run with mismatched MIUI versions without loss of call/data function. Voice, data, and SMS are expected to work normally.
-- **Re-flashing MIUI OTA:** A future OTA update will overwrite `md1img` with the updated modem, re-enabling CSSD enforcement. The `LD0B_001` patch must be re-applied after each OTA, and the modem must be re-downgraded if the OTA brings a `V145.9` modem. Block OTA updates to `md1img` if permanent bypass is needed.
+See the bypass path research section above for paths that remain open:
+
+- **Path A (wiped IMEI):** patch `LD0B_001` to all-FF default to get through V145.8's IMEI default bypass, but this only produces a device with no IMEI; patching to a real value triggers CSSD check on next boot.
+- **Modem ROM patch:** modify the compiled `is_enable_critical_data_check` function in `md1img` to always return FALSE. Requires identifying the function start in the binary (67 KB span, Capstone desync — hard) and a way to re-sign or disable SBC check for the patched image.
+- **BROM exploit:** extract or overwrite the device's RSA private key or the CSSD partition directly via a BROM vulnerability applicable to MT6769.
+- **CSSD recovery:** if the device's original `CSSD_000` data can be recovered (from a full nvdata backup taken before IMEI loss, or from the manufacturer), restoring it to both nvdata and the BinRegion nvram would re-enable normal IMEI patching flow.
