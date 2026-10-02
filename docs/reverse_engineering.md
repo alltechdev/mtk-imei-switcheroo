@@ -725,3 +725,54 @@ If instead a reboot loop or ECC mode occurs, it means the modem ignores the all-
 ### Companion `NV01_000` note
 
 `NV01_000` (96-byte LDI file, inode 384) decrypts to `__NVRAM_LOCK_NO_`. The modem ROM contains the comparator string `_NVRAM_LOCK_YES_` at `0x0147c58c` in the NVRAM service code (near `NVRAM_LOC_BIN_REGION_RESTORE_FAIL` assert string). This flag controls whether writes to NVRAM are locked — `NO_` = writes allowed. Changing it to `_NVRAM_LOCK_YES_` would prevent NVRAM daemon writes, potentially including `RestoreFlag` re-sets, but it would also prevent all NVRAM writes including legitimate ones. Not part of the current test plan.
+
+---
+
+## Preferred bypass — modem downgrade to MIUI 12.5 (Redmi Note 8 2021 / biloba)
+
+A three-way comparison of modem images for the **Redmi Note 8 2021** (biloba, MT6769) reveals a clean bypass that requires no nvdata/nvram surgery: flash the MIUI 12.5 modem, which predates the CSSD enforcement layer entirely.
+
+### Three-way modem comparison
+
+| Firmware | Modem SDK | `checkNVdataforNewBoardId` | `is_need_enable_critical_data_check` | CSSD enforced |
+|---|---|---|---|---|
+| MIUI 12.5 Global `V12.5.2.0.RCUMIXM` | `LR12A.R3.MP.V145.8.P22` | **ABSENT** | **ABSENT** | **NO** |
+| MIUI 12.5 EU `V12.5.1.0.RCUEUXM` | `LR12A.R3.MP.V145.8.P22` | **ABSENT** | **ABSENT** | **NO** |
+| Tester device `V13.0.7.0.SCUEUXM` | `LR12A.R3.MP.V145.9.P40` | present | present | YES |
+| Community dump (nvdata/nvram source) | `LR12A.R3.MP.V145.9.P29` | present | present | YES |
+
+The enforcement was added between `V145.8` (MIUI 12.5) and `V145.9` (MIUI 13+). Global and EU 12.5 builds carry the identical modem SDK version (`V145.8.P22`) and differ only in the DRDI container packing (8 KB size delta, 64-byte string offset shift) — both are equivalent for this purpose.
+
+**Key observation:** `CSSD_000` is absent as a string from all four modem builds. The modem accesses signed IMEI data by NVRAM LID, not by filename. The presence of `checkNVdataforNewBoardId` and `is_need_enable_critical_data_check` is the correct indicator of enforcement, not the `CSSD_000` filename.
+
+### Why the old modem bypasses the check
+
+The MIUI 12.5 modem (`V145.8`) has `custom_nvram_sec.c` compiled in and the RSA parsing infrastructure present (`devPubKeyModulus`, `criticalData`, `crticalDataSign` field parsers), but the two gating functions are absent:
+
+- `is_need_enable_critical_data_check` — absent: the "should this device run the check?" gate does not exist
+- `checkNVdataforNewBoardId` — absent: the "is this a new board that needs CSSD validation?" gate does not exist
+
+Without these gates, `custom_nvram_read_and_check_signed_critical_data` on `V145.8` either does not exist, is a stub, or goes directly to the "read critical data fail" → success path for any device that was shipped before CSSD provisioning was standard. In either case, the signed IMEI check never runs.
+
+### Flash procedure
+
+Flash only the `md1img` partition. `nvdata` and `nvram` do not need to be touched.
+
+```bash
+# Power off device, connect USB (do not power on)
+python3 mtkclient/mtk.py w md1img md1img_global_V12.5.2.0.RCUMIXM.img
+```
+
+After flashing, boot the device. The MIUI 12.5 modem accepts any valid `LD0B_001` without checking the signed critical data. Patch `LD0B_001` with `imei_tool.py` as on MT6761:
+
+```bash
+python3 imei_tool.py write nvdata.bin 350000000000000 -o nvdata_patched.bin
+# or patch on-device:
+python3 live_patch.sh 350000000000000
+```
+
+### Caveats
+
+- **SBC (Secure Boot Check):** EFuse `0x5 = 01000000` confirms SBC is enabled. The preloader will verify the modem image signature before booting it. Since `V12.5.2.0.RCUMIXM` is official Xiaomi firmware for biloba, its signing chain is valid and the preloader will accept it.
+- **Android ↔ modem compatibility:** The modem communicates with Android via the CCCI interface. MIUI 13 Android running with a MIUI 12.5 modem may trigger version-mismatch warnings in the modem log, but biloba devices in the community have been reported to run with mismatched MIUI versions without loss of call/data function. Voice, data, and SMS are expected to work normally.
+- **Re-flashing MIUI OTA:** A future OTA update will overwrite `md1img` with the updated modem, re-enabling CSSD enforcement. The `LD0B_001` patch must be re-applied after each OTA, and the modem must be re-downgraded if the OTA brings a `V145.9` modem. Block OTA updates to `md1img` if permanent bypass is needed.
