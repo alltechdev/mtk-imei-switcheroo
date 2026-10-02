@@ -819,7 +819,7 @@ custom_nvram_read_and_check_signed_critical_data():
     return 0 or error
 ```
 
-**Disassembly note on "read critical data fail" return value:** Capstone could not decode the compiled function body — MTK MAUI embeds literal pools, crypto data, and string metadata directly inside function bodies, causing the disassembler to desync. The nearest confirmed `PUSH {LR}` prologue is at file offset `0x014e7f80`, 67 KB before the `POP {PC}` epilogue at `0x014f8d9e`. Within that 67 KB span only 4 valid instructions decoded; the rest are data bytes. The value in `r0` at the `POP {PC}` return could not be recovered statically. **The tester result is the ground truth for this path.**
+**Disassembly note on "read critical data fail" return value:** Initial Capstone analysis attempted ARM Thumb-2 disassembly and failed to decode the function body, which was attributed to literal pools causing desync. The real cause: the modem ROM is **MIPS16e**, not ARM Thumb-2. Capstone was running the wrong disassembler. Subsequent MIPS16e analysis (see `docs/codex_find_is_enable.md`) correctly identified and decoded both `is_enable_critical_data_check` (312 code bytes, ROM `0x012eb880`–`0x012eb9b8`) and `custom_nvram_read_and_check_signed_critical_data` (266 code bytes, ROM `0x012eba08`–`0x012ebb12`). The value in `v0` at the MIPS16e `jrc ra` return for the "read critical data fail" path was not separately extracted from the disassembly — the live hardware result (IMEI patch rejected) is the ground truth for this path.
 
 #### V145.9 additions — string comparison
 
@@ -863,6 +863,6 @@ Flashed `md1img` partition from `md1img_global_V12.5.2.0.RCUMIXM.img` via mtkcli
 See the bypass path research section above for paths that remain open:
 
 - **Path A (wiped IMEI):** patch `LD0B_001` to all-FF default to get through V145.8's IMEI default bypass, but this only produces a device with no IMEI; patching to a real value triggers CSSD check on next boot.
-- **Modem ROM patch:** modify the compiled `is_enable_critical_data_check` function in `md1img` to always return FALSE. Requires identifying the function start in the binary (67 KB span, Capstone desync — hard) and a way to re-sign or disable SBC check for the patched image.
+- **Modem ROM patch: COMPLETED.** `is_enable_critical_data_check` identified at ROM offset `0x012eb880` (MIPS16e, 312 code bytes). Patched with `00 6a a0 e8 00 65` (`li v0,0; jrc ra; nop`) — returns FALSE before executing the original `save` prologue. Full-container patched image at `patched/md1img_global_V12.5.2.0.RCUMIXM.return_zero.img` (57,155,584 bytes, SHA-256 `c449b5b7…`). SBC will reject the unsigned container at boot; a device-specific re-signing step or SBC disable is required before this image can boot. See `docs/codex_find_is_enable.md` and `analysis/patch_is_enable.py`.
 - **BROM exploit:** extract or overwrite the device's RSA private key or the CSSD partition directly via a BROM vulnerability applicable to MT6769.
 - **CSSD recovery:** if the device's original `CSSD_000` data can be recovered (from a full nvdata backup taken before IMEI loss, or from the manufacturer), restoring it to both nvdata and the BinRegion nvram would re-enable normal IMEI patching flow.
