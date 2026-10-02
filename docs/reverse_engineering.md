@@ -745,14 +745,106 @@ The enforcement was added between `V145.8` (MIUI 12.5) and `V145.9` (MIUI 13+). 
 
 **Key observation:** `CSSD_000` is absent as a string from all four modem builds. The modem accesses signed IMEI data by NVRAM LID, not by filename. The presence of `checkNVdataforNewBoardId` and `is_need_enable_critical_data_check` is the correct indicator of enforcement, not the `CSSD_000` filename.
 
+### V145.8 ROM deep analysis — string evidence
+
+The following was determined by string analysis of `md1img_global_V12.5.2.0.RCUMIXM.img` (extracted ROM: `1_md1rom`, 22 MB, `base=0x00000000`, `data_offset=0x00000200`). MTK MAUI firmware does not embed string pointers in code — it uses integer trace IDs passed to `kal_trace()`. The trace strings themselves live in an extended ROM metadata region. Searching the code for string VMAs as 4-byte literal pool constants returns zero hits, confirming the trace-ID scheme. All function logic below was inferred from null-terminated trace strings in the extended region at file offsets `[0x014f7000, 0x014f9100]`.
+
+#### `is_enable_critical_data_check()` — V145.8 hwlevel gate
+
+V145.8 has its own gating function, `is_enable_critical_data_check`, which is **distinct from and less strict than** V145.9's renamed `is_need_enable_critical_data_check`. Complete logic inferred from the trace string set (all offsets are file offsets in `1_md1rom`):
+
+```
+is_enable_critical_data_check():
+    Get product name from system properties      ← "lcsh get product name:%s" @ 0x014f83ec
+    Read ro.boot.hwlevel                         ← "lcsh get hwlevel:%s" @ 0x014f846c
+
+    if hwlevel == "P0":
+        log "SKIP P0"                            ← 0x014f8480
+        return FALSE    (check disabled)
+
+    if hwlevel in {"P1", "P1.1", "P2+"}:
+        read sign_control_data from NVRAM
+        if sign_control_data != default_value:
+            log "sign control data is not default value, skip"    ← 0x014f84f0
+            return FALSE  (non-default sign control → skip)
+        else:
+            log "P1 P1.1 P2+ custom nv check"   ← 0x014f84b0
+            return TRUE   (check enabled)
+
+    if hwlevel == "MP":
+        log "MP"                                 ← 0x014f8540
+        return TRUE     (MP device → check enabled)
+
+    else:
+        log "other hwlevel skip"                 ← 0x014f8568
+        return FALSE    (unknown hwlevel → skip)
+```
+
+Notably: V145.8 reads `"lcsh get product name:%s"` (0x014f83ec) but no biloba/rosemary/maltose/pending/secret comparison strings appear anywhere in the V145.8 ROM — the product name is logged but not compared against any device list. This is the key difference from V145.9.
+
+#### `custom_nvram_read_and_check_signed_critical_data()` — V145.8 full control flow
+
+All exit paths inferred from trace strings at file offsets `[0x014f85b0, 0x014f8700]`:
+
+```
+custom_nvram_read_and_check_signed_critical_data():
+    log entry                                    ← "lcsh custom_nvram_read_and_check_signed_critical_data" @ 0x014f85b0
+
+    if is_enable_critical_data_check() == FALSE:
+        log "lcsh skip IMEI check"               ← 0x014f85e8
+        return 0        ← SUCCESS (CSSD never touched)
+
+    read IMEI from NVRAM
+    if read fails:
+        log "read imei fail"                     ← 0x014f8600
+        return error
+
+    if IMEI == all-FF default value:
+        log "imei is default value, bypass check"← 0x014f8640   ← PATH A: confirmed SUCCESS
+        return 0        ← SUCCESS (CSSD never touched)
+
+    read CSSD_000 (critical data)
+    if read fails:
+        log "read critical data fail"            ← 0x014f8698   ← PATH B: return value UNCERTAIN
+        return ???      ← see disassembly note below
+
+    if sign_data == default value:
+        log "sign data is default value, check fail" ← 0x014f86e4
+        return error    ← CSSD present but unprovisioned → FAIL
+
+    verify devPubKey + criticalData RSA signatures
+    log "custom_nvram_check_signed_critical_data return %d"   ← 0x014f8394
+    return 0 or error
+```
+
+**Disassembly note on "read critical data fail" return value:** Capstone could not decode the compiled function body — MTK MAUI embeds literal pools, crypto data, and string metadata directly inside function bodies, causing the disassembler to desync. The nearest confirmed `PUSH {LR}` prologue is at file offset `0x014e7f80`, 67 KB before the `POP {PC}` epilogue at `0x014f8d9e`. Within that 67 KB span only 4 valid instructions decoded; the rest are data bytes. The value in `r0` at the `POP {PC}` return could not be recovered statically. **The tester result is the ground truth for this path.**
+
+#### V145.9 additions — string comparison
+
+| String | V145.8 file offset | V145.9 file offset | Notes |
+|---|---|---|---|
+| `lcsh is_enable_critical_data_check` | `0x014f83c8` | absent | V145.8 name; renamed in V145.9 |
+| `lcsh is_need_enable_critical_data_check` | absent | `0x015221b8` | V145.9 rename of the gate function |
+| `lcsh new board id, check IMEI and IMEI2` | absent | `0x015223b8` | new per-board-ID check path |
+| `lcsh checkNVdataforNewBoardId chk_val=%d ret_val=%d` | absent | `0x015223e4` | new enforcement function |
+| `biloba` in product name comparison list | absent | `0x01522190` | biloba explicitly added to check scope |
+| `is factory or old boardid` bypass path | absent | `0x01522500` | new bypass for factory/old-boardid devices |
+| `imei is default value, bypass check` | `0x014f8640` | `0x015224a8` | present in both versions |
+| `read critical data fail` | `0x014f8698` | `0x0152254c` | present in both versions |
+
+The `biloba` string at V145.9 file `0x01522190` appears adjacent to `secret`, `rosemary`, `maltose`, and `pending` — these are Redmi Note 8 2021 model variants that V145.9 explicitly added to `checkNVdataforNewBoardId`'s enforcement scope. None of these product names appear anywhere in V145.8's string region. The `"is factory or old boardid"` path V145.9 added (between the IMEI default bypass and the "read critical data fail" log) suggests V145.9 simultaneously tightened enforcement for new board IDs while adding an explicit bypass for older/factory units that were shipped without CSSD provisioning.
+
 ### Why the old modem bypasses the check
 
-The MIUI 12.5 modem (`V145.8`) has `custom_nvram_sec.c` compiled in and the RSA parsing infrastructure present (`devPubKeyModulus`, `criticalData`, `crticalDataSign` field parsers), but the two gating functions are absent:
+V145.8 has a **complete** `custom_nvram_read_and_check_signed_critical_data` implementation with a working hwlevel gate — it is not absent and not a stub. For a retail biloba device (hwlevel = `"MP"`), `is_enable_critical_data_check` returns TRUE and the CSSD check runs. The bypass operates via one of two paths:
 
-- `is_need_enable_critical_data_check` — absent: the "should this device run the check?" gate does not exist
-- `checkNVdataforNewBoardId` — absent: the "is this a new board that needs CSSD validation?" gate does not exist
+**Path A — wiped/default IMEI (confirmed from strings, return value = 0):**
+Any scenario that leaves `LD0B_001` in its unprovisioned state (IMEI BCD = `FF FF FF FF FF FF FF FF`) — factory reset, bad flash, or deliberate IMEI wipe — causes V145.8 to log `"imei is default value, bypass check"` at `0x014f8640` and return 0 (SUCCESS) without reading CSSD_000 at all. This path is present in both V145.8 and V145.9 and its return value is unambiguous from the log string.
 
-Without these gates, `custom_nvram_read_and_check_signed_critical_data` on `V145.8` either does not exist, is a stub, or goes directly to the "read critical data fail" → success path for any device that was shipped before CSSD provisioning was standard. In either case, the signed IMEI check never runs.
+**Path B — missing CSSD with valid IMEI (return value unconfirmed):**
+If `LD0B_001` holds a valid non-default IMEI but CSSD_000 is absent, V145.8 hits `"read critical data fail"` at `0x014f8698`. Whether this returns 0 (permissive — old modem skips enforcement entirely) or non-zero (strict — same outcome as V145.9) could not be determined by binary disassembly. If Path B returns 0, the old modem bypasses for any biloba regardless of IMEI state. If Path B returns non-zero, only Path A (devices with wiped IMEI) benefits from the modem downgrade. **The tester result resolves this.**
+
+The structural difference V145.9 introduced for biloba specifically: `checkNVdataforNewBoardId` was added and `biloba` was placed in its target device list, creating a second enforcement gate that runs regardless of hwlevel. V145.8 has no equivalent — it only applies the hwlevel gate and has no knowledge of biloba as a special product requiring CSSD.
 
 ### Flash procedure
 
