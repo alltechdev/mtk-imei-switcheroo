@@ -548,3 +548,180 @@ Independent end-to-end confirmation on a live **TIQ M5** (MT6761, dual-SIM):
 ### What is *not* yet checked on TIQ M5
 
 - (no remaining items — both bad-checksum behavior and the CRLF-layer question are resolved above.)
+
+---
+
+## Why IMEI patching does not persist on Helio G85 (MT6769) — community report analysis
+
+A community user reported that on a Helio G85 device (LineageOS 19 over MIUI 13, MT6769 SoC) every write to `LD0B_001` — including restoring the factory-original bytes — is silently overwritten after reboot. MAC address patching (BT + WiFi) worked normally on the same device.
+
+This section documents the root cause, derived from a full analysis of the device's partition dumps (`notworkingonthisphone/`). Every claim below is backed by a specific byte offset in those images.
+
+### Root cause: two-layer defense on MT6769
+
+MT6769 differs from MT6761 (F21 Pro, TIQ M5, F25) in one critical way: it ships a **cryptographically-signed IMEI enforcement layer** implemented in `pcore/custom/service/nvram/custom_nvram_sec.c` (confirmed via source-path string at modem ROM offset `0x1521c64`). MT6761 devices do not have this file; their `custom_nvram_sec.c` is absent from the modem binary's embedded source paths.
+
+The defense has two independent layers:
+
+**Layer 1 — `RestoreFlag` triggered BinRegion restore (unconditional)**
+
+The nvdata ext4 filesystem (verified via `debugfs` on `nvdata.bin`) contains a file `RestoreFlag` at the filesystem root (inode 12) with content `78 56 34 12` = little-endian `0x12345678`. This is the MTK NVRAM daemon's "restore-needed" sentinel. When the daemon sees this file on boot, it copies every record from the BinRegion (`nvram` partition) into nvdata before the OS fully starts, then clears the flag.
+
+The dump was taken while this flag was set (consistent with mtkclient pulling the partition image in BROM mode, before the daemon's boot-time restore cleared it). The practical result: **any write to nvdata while the device is powered off is overwritten by the BinRegion copy on the next power-on**, regardless of whether the IMEI values are correct or not. This is why restoring the factory-original bytes also reverts — the daemon copies them from nvram anyway.
+
+The `RestoreFlag` would also be (re-)set by Layer 2 when it detects an IMEI mismatch, so even if you pre-cleared the flag, a mismatch would set it again and cause the same outcome on the subsequent boot.
+
+**Layer 2 — RSA-signed `criticalData` in `CSSD_000` (cryptographic)**
+
+Alongside `LD0B_001` in `NVD_IMEI` there is a second file, `CSSD_000` (4168 bytes), present on this MT6769 device but **absent from the F21 Pro and TIQ M5 (both MT6761)**. The `FILELIST` for this device lists five entries: `NV0S_000`, `FILELIST`, `LD0B_001`, `CSSD_000`, `NV01_000`. The F21 Pro `FILELIST` has four entries with no `CSSD_000`.
+
+`CSSD_000` begins with the standard `LDI\x00` NVRAM header (64 bytes), followed by 4104 bytes of null-terminated ASCII text using `\n` (the two-character literal sequence `0x5c 0x6e`, not the byte `0x0a`) as a field separator. The fields are:
+
+| Field | Value (from dump) | Interpretation |
+|---|---|---|
+| `devPubKeyModulus` | 256 hex chars = 128 bytes | RSA-1024 device public key modulus |
+| `devPubKeyExponent` | `10001` | RSA exponent 65537 |
+| `devPubKeySign` | 512 hex chars = 256 bytes | Manufacturer RSA-2048 signature over the device public key |
+| `criticalData` | 204 hex chars = 102 bytes | TLV record containing the device's official IMEIs and device IDs |
+| `crticalDataSign` | 256 hex chars = 128 bytes | RSA-1024 signature over `criticalData`, signed with the device's private key |
+
+The `criticalData` field decodes as a TLV structure with a 4-byte header (`0001 0062`) followed by five records:
+
+| Tag | Length | Decoded content |
+|---|---|---|
+| `0x01` | 34 | `0x66dd3631dad31142986b6d0de8287cd2` — board/device hash |
+| `0x02` | 15 | `861276053685107` — IMEI1 as ASCII |
+| `0x03` | 15 | `861276053685115` — IMEI2 as ASCII |
+| `0x05` | 12 | `B83BCCE54866` — device ID #1 |
+| `0x06` | 12 | `B83BCCE54863` — device ID #2 |
+
+The modem's boot-time IMEI check (`custom_nvram_read_and_check_signed_critical_data`, confirmed by string at modem ROM offset `0x15224a8`):
+
+1. Reads `CSSD_000`, verifies `devPubKeyModulus` against `devPubKeySign` using the manufacturer's hardcoded RSA-2048 root key.
+2. Reads `criticalData`, verifies `crticalDataSign` using `devPubKeyModulus` — authenticating that `criticalData` was signed by this device's unique private key.
+3. Extracts the IMEIs from tags `0x02` and `0x03` of `criticalData`.
+4. Reads `LD0B_001`, decrypts with AES-128-ECB, validates the MD5-XOR checksum.
+5. Compares the decoded IMEI against the `criticalData` IMEIs.
+6. On mismatch: logs `custom_nvram_check_imei%d not identical` (offset `0x1521c94`), attempts rewrite via `custom_nvram_check_imei%d re-write with signed data` (offset `0x1521cec`), and on failure sets `RestoreFlag` to trigger BinRegion restore on next boot.
+
+The cross-check confirms the factory values are consistent: both the `LD0B_001` in nvdata and the `criticalData` in `CSSD_000` encode IMEI1=`861276053685107` and IMEI2=`861276053685115`. Both nvdata files are byte-identical to their BinRegion (`nvram`) copies — consistent with the BinRegion restore having already run before the dump was taken.
+
+### Why MAC patching works but IMEI patching does not
+
+BT and WiFi MAC address files live in separate NVRAM directories (`NVD_BT` and `NVD_WIFI`), outside the scope of `criticalData`. Their integrity check uses only the 2-byte `NVM_ComputeCheckNo` trailer documented in `wifi_bt_reverse_engineering.md` — no cryptographic signature. Patching the MAC value and recomputing the 2-byte trailer is sufficient for the modem to accept the change. `CSSD_000` has no equivalent for MAC files on this device.
+
+### What would be required to change the IMEI on this device
+
+To change the IMEI, all of the following would need to be updated consistently:
+
+1. `nvdata/NVD_IMEI/LD0B_001` — new IMEI in AES-ECB encrypted BCD format with valid MD5-XOR checksum
+2. `nvram` BinRegion copy of `LD0B_001` at AllFile offset `0x21d5` — same new values (otherwise Layer 1 restores from it)
+3. `nvdata/NVD_IMEI/CSSD_000` — `criticalData` tags `0x02` and `0x03` updated to the new IMEI
+4. `nvdata/NVD_IMEI/CSSD_000` — `crticalDataSign` re-signed over the new `criticalData` **→ requires the device's RSA-1024 private key**
+5. `nvram` BinRegion copy of `CSSD_000` — same updated content
+
+Steps 4–5 are not feasible via software: the device's RSA-1024 private key is generated at manufacturing time and never exposed to software (it is held in hardware secure storage). The manufacturer's RSA-2048 key (needed to re-issue `devPubKeySign`) is similarly inaccessible.
+
+Alternative approaches not requiring the private key:
+
+- **Modem ROM patch** to take the `lcsh skip IMEI check` path (string at modem ROM offset `0x1522450`). The skip condition is not yet decoded from the binary, but SBC is enabled on this device (EFuse `0x5 = 01000000`), which likely ties the skip to a hardware bit that cannot be cleared in software.
+- **Firmware downgrade** to a version of MT6769 modem firmware that predates the `custom_nvram_sec.c` signed-IMEI layer, if one exists for this device's specific hardware.
+- **BROM-level exploit** to extract or overwrite the signing key in secure storage, if a BROM vulnerability applicable to MT6769 is available.
+
+### BinRegion write protection
+
+As documented in `wifi_bt_reverse_engineering.md`, writes to the `nvram` block device are silently discarded on this class of device (the write is reported as successful but the data does not persist). This makes step 2 above impossible through the standard Linux block device interface. A fastboot or mtkclient-based flash of the `nvram` partition image is the only path for updating the BinRegion.
+
+### Summary
+
+The community user's observation — "even restoring original values gets reverted" — is explained by `RestoreFlag = 0x12345678` already being set in the nvdata filesystem at the time of the dump. The NVRAM daemon performs an unconditional BinRegion restore on every boot when this flag is present, overwriting whatever was written to nvdata. The underlying reason the flag gets (re-)set is the MT6769's RSA-signed `criticalData` check in `CSSD_000`: when the check fails it sets `RestoreFlag`, and updating `CSSD_000` to match a new IMEI requires the device's private key.
+
+This signed-IMEI mechanism is absent from the repo's tested platforms (MT6761: F21 Pro, TIQ M5, F25). Devices using MT6769 (Helio G85) or later MT67xx SoCs with `custom_nvram_sec.c` present in the modem binary will exhibit this behavior.
+
+---
+
+## Bypass path research — MT6769 modem ROM deep analysis
+
+After confirming the two-layer defense above, a deeper analysis of the MT6769 modem ROM strings (in `notworkingonthisphone/md1/0_md1rom`) was performed to find code paths that exit `custom_nvram_read_and_check_signed_critical_data` with success **without** validating `CSSD_000`. Three exit paths were identified from modem log strings. The analysis was string-only (no disassembly); code offsets below are file offsets in `0_md1rom`.
+
+### Modem call chain (from ROM strings)
+
+The relevant function call chain for an MP (retail) device:
+
+1. **`is_need_enable_critical_data_check`** (`0x1521d0`–`0x152236c`):
+   - Reads `ro.boot.hwlevel` from Android properties.
+   - `P0` → `"SKIP P0"` (log `0x15221e4`) → returns FALSE → entire check skipped.
+   - `P1`/`P1.1`/`P2+` → checks "sign control data"; if non-default → `"sign control data is not default value, skip"` (log `0x1522260`) → returns FALSE → check skipped.
+   - `MP` → `"lcsh is_need_enable_critical_data_check MP"` (log `0x1522340`) → returns TRUE → check proceeds.
+   - Any other value → returns FALSE.
+
+2. **`checkNVdataforNewBoardId`** (called from within `custom_nvram_read_and_check_signed_critical_data`):
+   - String `"lcsh new board id, check IMEI and IMEI2"` at `0x15223b8`.
+   - Returns a boolean: `"new board id"` (check runs) or `"old boardid"` (check skipped).
+   - The string `ro.boot.hwlevel` appears at `0x15223a8`, 16 bytes before the log — this function also reads hwlevel, likely reading it from a cached value. For MP hardware, hwlevel is always `"MP"`. The source-level documentation for this path is absent from the modem ROM strings alone; see Path B analysis below.
+
+3. **`custom_nvram_read_and_check_signed_critical_data`** (main body):
+   - `"lcsh custom_nvram_read_and_check_signed_critical_data"` entry log at `0x1522418`.
+   - `"lcsh skip IMEI check"` at `0x1522450` — returned before any IMEI read if `is_need_enable` returned FALSE.
+   - `"custom_nvram_read_and_check_signed_critical_data read imei fail"` at `0x1522468`.
+   - `"imei is default value, bypass check"` at `0x15224a8` → **Path A bypass** (returns success).
+   - `"is factory or old boardid"` at `0x1522500` → **Path B bypass** (returns success if `checkNVdataforNewBoardId` returned "old boardid").
+   - `"read critical data fail"` at `0x152254c` → reads `CSSD_000`; if unreadable, this log fires and the outcome is unknown (may succeed or fail-safe to RestoreFlag).
+   - `"sign data is default value, check fail"` at `0x1522598` → CSSD present but all-default; **returns failure** and likely sets RestoreFlag.
+
+### Path A — all-FF BCD IMEI in `LD0B_001`
+
+**What it does:** after reading and decrypting `LD0B_001`, the modem checks if the IMEI BCD bytes are all `0xFF` (the unprovisioned default). If yes, it logs `"imei is default value, bypass check"` and returns success **without** reading `CSSD_000` at all.
+
+**How to trigger it:** write a `LD0B_001` with IMEI BCD = `FF FF FF FF FF FF FF FF` and valid MD5-XOR checksum at bytes 10–17. The `build_patched_ld0b(orig, None)` call in `patch_all.py` produces this. The modem reports "no IMEI" to the Android stack (which shows the default IMEI `000000000000000` to the user), but the boot check passes and no RestoreFlag is set. This is useful as a persistence test, not a IMEI-change solution.
+
+### Path B — zero `NV0S_000` to trigger "old boardid"
+
+**Hypothesis:** `checkNVdataforNewBoardId` reads the board certificate from `NV0S_000` (144-byte LDI-encrypted file at AllFile offset `0x2118`). If `NV0S_000` is zeroed (all-default), the function finds no valid board certificate, concludes the device is an old/factory board without a certificate, and returns `"old boardid"`. The outer function then logs `"is factory or old boardid"` and returns success without reading `CSSD_000`.
+
+**Evidence for hypothesis:** `NV0S_000` is listed in the NVRAM file descriptor table at modem ROM `0x015ac768` (entry `NV0S.000`, flags `0x0001f01c`, size `0x04b8`). The adjacent `NONE` entry at `0x015ac744` (flags `0x0002f00a`, LID `0x6081`) carries the same version/LID values as the `NV0S_000` LDI header bytes `[4:8]` (`0x0002f00a`) and `[12:16]` (`0x00006081`), suggesting `NONE` is an alias or "no certificate" placeholder that the firmware falls back to when `NV0S_000` is unreadable or default-valued. This is consistent with the "old boardid" path being triggered by an absent/default board certificate.
+
+**Counterpoint:** `ro.boot.hwlevel` appears at `0x15223a8` directly before the "new board id" log. It is possible that `checkNVdataforNewBoardId` simply re-reads hwlevel and returns "new boardid" for `MP` regardless of `NV0S_000` content. If so, Path B is blocked for MP devices.
+
+### Test images produced
+
+Three 64 MB images in `notworkingonthisphone/` (produced by `scratchpad/patch_all.py`, verified via `verify_patches.py`):
+
+| File | nvdata modifications | Purpose |
+|---|---|---|
+| `nvdata_bypass_a.bin` | `LD0B_001` all-FF IMEI + `NV0S_000` zeroed + `RestoreFlag` cleared | Tests Path A (all-FF IMEI bypass) |
+| `nvdata_bypass_b.bin` | `LD0B_001` IMEI=`000000000000000` + `NV0S_000` zeroed + `RestoreFlag` cleared | Tests Path B (old-boardid bypass) with a readable non-default IMEI |
+| `nvram_bypass.bin` | BinRegion `LD0B_001` all-FF IMEI + `NV0S_000` zeroed | Ensures BinRegion is consistent; if `RestoreFlag` re-fires, device still gets all-FF IMEI → Path A can still work |
+
+Each nvdata image patches both locations where `LD0B_001` appears:
+- `md/NVRAM/NVD_IMEI/LD0B_001` (inode 383, patched in-place via ext4 extent map)
+- `AllFile` at image offset `0x87B1D5` (= ext4 AllFile block base `0x879000` + AllMap entry offset `0x21D5`)
+
+`NV0S_000` is similarly patched in both locations:
+- `md/NVRAM/NVD_IMEI/NV0S_000` (inode 385)
+- `AllFile` at image offset `0x87B118` (base `0x879000` + offset `0x2118`)
+
+### Flash procedure
+
+Both `nvram_bypass.bin` (for the `nvram` partition) and one of the `nvdata_bypass_*.bin` files (for the `nvdata` partition) must be flashed. Writes to `nvram` through the live Linux block device are silently discarded — BROM-mode flash via mtkclient is required for both.
+
+```bash
+# Power off device, connect USB (do not power on)
+# Enter BROM by holding VolDown + connecting USB, or use mtkclient --payload brom
+
+python3 mtkclient/mtk.py w nvdata notworkingonthisphone/nvdata_bypass_a.bin
+python3 mtkclient/mtk.py w nvram  notworkingonthisphone/nvram_bypass.bin
+```
+
+Boot the device. On first boot:
+1. The NVRAM daemon reads `RestoreFlag` in nvdata — it is now `00000000` (cleared). Daemon skips BinRegion restore.
+2. Modem reads `LD0B_001` → decrypts → IMEI BCD = `FF FF FF FF...` → logs `"imei is default value, bypass check"` → success without touching `CSSD_000`.
+3. Device boots normally with no IMEI (reports `000000000000000` or equivalent).
+
+If instead a reboot loop or ECC mode occurs, it means the modem ignores the all-FF bypass and falls through to CSSD validation (which then fails). In that case:
+1. Reflash with `nvdata_bypass_b.bin` (000...0 IMEI, NV0S zeroed) — this tests whether Path B (old-boardid from zeroed NV0S) provides an alternative bypass.
+2. If that also fails, `checkNVdataforNewBoardId` ignores `NV0S_000` and always returns "new boardid" for MP devices, meaning both Path A and Path B are blocked. In that case, the only remaining options are a modem ROM patch or BROM exploit.
+
+### Companion `NV01_000` note
+
+`NV01_000` (96-byte LDI file, inode 384) decrypts to `__NVRAM_LOCK_NO_`. The modem ROM contains the comparator string `_NVRAM_LOCK_YES_` at `0x0147c58c` in the NVRAM service code (near `NVRAM_LOC_BIN_REGION_RESTORE_FAIL` assert string). This flag controls whether writes to NVRAM are locked — `NO_` = writes allowed. Changing it to `_NVRAM_LOCK_YES_` would prevent NVRAM daemon writes, potentially including `RestoreFlag` re-sets, but it would also prevent all NVRAM writes including legitimate ones. Not part of the current test plan.
