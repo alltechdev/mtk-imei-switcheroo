@@ -1,3 +1,15 @@
 __pycache__/
 *.pyc
 tmp/
+
+# Firmware research inputs and generated artifacts are never source files.
+*.img
+*.bin
+*.zip
+*.elf
+*.pem
+*.key
+*.patched
+*.qemu.log
+/runs/
+/.venv/

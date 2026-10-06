@@ -1,0 +1,29 @@
+{
+  "date": "2026-10-06",
+  "checks": {
+    "v12": {
+      "clean_directory_reproduction": "passed",
+      "execution_cases": 17,
+      "exact_changed_bytes": 7,
+      "raw_rom_matches_container": true,
+      "dry_run_writes_nothing": true,
+      "rejects_bad_input_inplace_overwrite": true,
+      "output_hashes": {
+        "md1img.img": "c449b5b701e1b376c85d04df4e7a0a3f2fab9b3afc590345b6c38176a42763e6",
+        "lk.img": "b3fab4a083cd4955b7c8a8a83bc7b2d5f562d66ef6542c449952369c2f36843f"
+      }
+    },
+    "v14": {
+      "clean_directory_reproduction": "passed",
+      "execution_cases": 17,
+      "exact_changed_bytes": 7,
+      "raw_rom_matches_container": true,
+      "dry_run_writes_nothing": true,
+      "rejects_bad_input_inplace_overwrite": true,
+      "output_hashes": {
+        "md1img.img": "91a02126306d9eaa606eec9e85da7ef73fe4b23b7c2de141131d014f95dbda3a",
+        "lk.img": "2ff4e224db4984bbc8468cbced5fde8d75497035a715ea7aa1ca205febb3d19d"
+      }
+    }
+  }
+}

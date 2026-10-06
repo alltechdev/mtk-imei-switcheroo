@@ -1,0 +1,16 @@
+[
+  {
+    "case": "caller_skip_success",
+    "expected_caller_result": 1,
+    "expected_exit": 0,
+    "actual_exit": 0,
+    "stderr": ""
+  },
+  {
+    "case": "caller_wrong_expectation",
+    "expected_caller_result": 0,
+    "expected_exit": 99,
+    "actual_exit": 99,
+    "stderr": ""
+  }
+]

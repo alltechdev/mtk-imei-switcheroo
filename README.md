@@ -69,8 +69,9 @@ apply these firmware changes.
   offline; no hardware result has been reported for this version.
 
 See [biloba status](docs/biloba/README.md), [exact edits](docs/biloba/patches.md),
-[verification limits](docs/biloba/verification.md), and
-[standalone patcher usage](docs/biloba/patchers.md). These edits require exact
+[verification limits](docs/biloba/verification.md),
+[standalone patcher usage](docs/biloba/patchers.md), and the
+[offline reproduction workflow](docs/biloba/reproduce.md). These edits require exact
 firmware fingerprints; shared chipset identity does not establish compatibility.
 
 ## WiFi MAC and Bluetooth address

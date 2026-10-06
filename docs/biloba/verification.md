@@ -43,6 +43,7 @@ The old pair's reported success does not establish a V14 result, compatibility
 with another device, or long-term radio/IMEI persistence. Those require device
 testing. No device was flashed by the analysis scripts or execution harnesses.
 
-The analysis fixtures and full reproduction runner remain in the separate
-research workspace; they are not shipped in this repository. The standalone
-patchers were supplied separately. See [script usage](patchers.md).
+The [reproduction runner](reproduce.md) rebuilds the execution fixtures from
+user-supplied originals. [Research tools and saved evidence](../../research/biloba/README.md)
+are included; firmware and generated ELF fixtures are excluded. Each run records
+input/output hashes, tool versions, script hashes and individual test results.

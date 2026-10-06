@@ -35,6 +35,8 @@ condition; changing LK is not a universal secure-boot bypass.
 - [Input/output fingerprints](artifacts.md)
 - [Verification and remaining limits](verification.md)
 - [Standalone script usage](patchers.md)
+- [Reproduce the complete offline checks](reproduce.md)
+- [Research tools and saved evidence](../../research/biloba/README.md)
 
 These findings came from supplied binaries, disassembly, isolated execution
 tests and the tester's report. No matching vendor signing key was identified

@@ -1,0 +1,25 @@
+{
+  "version": "v14",
+  "label": "V14.0.4.0.TCUMIXM",
+  "inputs": {
+    "md1img.img": "4077b7aa2b0d7eb1f0c51cde274fb2053e90e66e64134765410a74d1d01442fc",
+    "lk.img": "d0f4b13c75693e5583bc77f6acccdcd40337b88f47226e7272dfb7d1a35f9bb0",
+    "preloader.img": "e961d577c6ed255426a820535b04f157a4726277f5700f8cb9f7c80e8e405c1b"
+  },
+  "outputs": {
+    "md1img.img": "91a02126306d9eaa606eec9e85da7ef73fe4b23b7c2de141131d014f95dbda3a",
+    "lk.img": "2ff4e224db4984bbc8468cbced5fde8d75497035a715ea7aa1ca205febb3d19d"
+  },
+  "modem_patcher": "patch_is_enable_V14.0.4.0.py",
+  "lk_patcher": "patch_lk_md1_policy_V14.0.4.0.py",
+  "gate_range": [
+    20013856,
+    20014206
+  ],
+  "caller_range": [
+    20014372,
+    20014658
+  ],
+  "lk_policy_entry": 1188080,
+  "preloader_lk_policy_offset": 311028
+}

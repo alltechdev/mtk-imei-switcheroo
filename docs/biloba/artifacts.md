@@ -1,7 +1,7 @@
 # Biloba firmware fingerprints
 
-SHA-256 identifies complete files. These files and the standalone patchers
-were supplied separately; they are not included in this repository.
+SHA-256 identifies complete files. Firmware files are not included in this repository.
+The versioned patchers and verification tools are included.
 
 ## V12 modem and supplied LK dump
 
