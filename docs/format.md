@@ -1,5 +1,8 @@
 # `LD0B_001` binary format and crypto
 
+A valid LD0B checksum does not bypass additional firmware checks on every device.
+Biloba has a separate signed critical-data gate; see [the biloba findings](biloba/README.md).
+
 This page documents the on-disk layout of the IMEI NVRAM file on MT67xx devices (verified against F21 Pro, F25, and TIQ M5), the encryption used to protect it, and the modem-validated checksum that gates whether a written IMEI is accepted. It's the reference an engineer would need to reimplement what `imei_tool.py` does.
 
 ## File layout

@@ -16,7 +16,7 @@ Then run `./live_patch.sh` for the interactive IMEI flow, or call `python3 imei_
 
 ## How it works
 
-On MediaTek MT67xx devices (verified on F21 Pro, F25, and TIQ M5), the modem firmware encrypts each IMEI in NVRAM using AES-128-ECB. The decrypted plaintext is a 32-byte block: BCD-encoded IMEI (8 bytes), a 2-byte filler at `[8:10]`, an 8-byte MD5-XOR checksum the modem validates on read, and 14 bytes of zero padding. The modem only validates the checksum — the 2-byte filler can be any value as long as the checksum is computed over it correctly. Single-SIM units (F21 Pro) populate one slot at `[0x40:0x60]`; dual-SIM units (F25, TIQ M5) populate a second at `[0x60:0x80]` with the same structure. This tool reimplements the encryption and the checksum so it can rewrite either IMEI without touching the device.
+On MediaTek MT67xx devices (verified on F21 Pro, F25, and TIQ M5), the modem firmware encrypts each IMEI in NVRAM using AES-128-ECB. The decrypted plaintext is a 32-byte block: BCD-encoded IMEI (8 bytes), a 2-byte filler at `[8:10]`, an 8-byte MD5-XOR checksum the modem validates on read, and 14 bytes of zero padding. For this IMEI record checksum, the 2-byte filler can be any value as long as the checksum is computed over it correctly. Single-SIM units (F21 Pro) populate one slot at `[0x40:0x60]`; dual-SIM units (F25, TIQ M5) populate a second at `[0x60:0x80]` with the same structure. This tool reimplements the encryption and the checksum so it can rewrite either IMEI without touching the device.
 
 The AES key is `3f06bd14d45fa985dd027410f0214d22` — pre-computed once from MTK's standard NVRAM seed via the `SST_Get_NVRAM_SW_Key` derivation (see [bkerler/mtkclient](https://github.com/bkerler/mtkclient) for the algorithm) and hardcoded as `AES_KEY`.
 
@@ -55,6 +55,23 @@ The tool auto-detects whether the input is a standalone `LD0B_001` or a partitio
 - **F21 Pro (Android 11), live device** — end-to-end verified with random IMEIs via both paths: `live_patch.sh` (push patched `LD0B_001` back through ADB) and `fastboot flash nvdata` of a partition image patched offline by `imei_tool.py`. Slot 1 patches persisted across reboot and appeared in `iphonesubinfo`. Slot 2 reads as `(empty)` on this single-SIM device.
 - **F25 (dual-SIM), live device** — confirmed end-to-end on F25 hardware via both this repo's `live_patch.sh` and the [`flipphoneguy/mtk-imei-switcheroo-app`](https://github.com/flipphoneguy/mtk-imei-switcheroo-app) Java port: patched IMEIs persist across reboot and the modem accepts the patched bytes at runtime. **F25 hardware testing is performed by the port author (also the F25 device tester); we do not have F25 hardware on this side.** Earlier offline validation against the stock F25 firmware ZIP exercised `imei_tool.py read`, `write -s 1`, and `write -s 2` (both slots decrypt cleanly with the same AES key, both produce modem-valid MD5-XOR checksums when re-encoded, both round-trip through `encrypt → decrypt → BCD-decode`).
 - **TIQ M5 (dual-SIM, MT6761), live device** — `nvdata.bin` pulled via mtkclient, both slots patched offline with `imei_tool.py write -s 1` / `-s 2`, patched image flashed back via mtkclient, device booted. Both IMEIs read back as the written value on-device, confirming the modem accepts patched bytes at runtime. This was the first dual-SIM device validated end-to-end on hardware (F25 hardware confirmation followed; see above). Surfaced a bug in `_patch_all_copies` (now fixed) where same-header copies with body differences were being homogenized — see [`docs/reverse_engineering.md` § Hardware validation (TIQ M5)](docs/reverse_engineering.md#hardware-validation-tiq-m5-dual-sim). Subsequently, `./live_patch.sh` ran end-to-end on the same device: dual-SIM `[1/2/n]` prompt routed correctly, slot 1 and slot 2 each patched independently across separate runs (the other slot byte-identical post-patch), file md5 matches across reboot in both runs (modem persists). The script's pull mechanism was extended during this verification to handle a CRLF-injection observation on this device's Android 13 + Magisk combo (see the same RE doc section).
+
+## Redmi Note 8 2021 (biloba): additional firmware checks
+
+Biloba adds a signed critical-data check beyond the LD0B checksum. Separate
+modem/LK patches were investigated; `imei_tool.py` and `live_patch.sh` do not
+apply these firmware changes.
+
+- **V12.5.2.0 modem + supplied LK:** the modem-only patch bootlooped; the paired
+  patches were subsequently reported working by the tester. This is a tester
+  report, not an independently captured end-to-end IMEI persistence result.
+- **V14.0.4.0 modem + bundled LK:** separate candidates built and verified
+  offline; no hardware result has been reported for this version.
+
+See [biloba status](docs/biloba/README.md), [exact edits](docs/biloba/patches.md),
+[verification limits](docs/biloba/verification.md), and
+[standalone patcher usage](docs/biloba/patchers.md). These edits require exact
+firmware fingerprints; shared chipset identity does not establish compatibility.
 
 ## WiFi MAC and Bluetooth address
 

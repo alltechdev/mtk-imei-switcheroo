@@ -1,5 +1,8 @@
 # `imei_tool.py` — reference
 
+A valid LD0B checksum does not bypass additional firmware checks on every device.
+Biloba has a separate signed critical-data gate; see [the biloba findings](biloba/README.md).
+
 Reads and writes the IMEI inside an MTK NVRAM `LD0B_001` blob — either as a standalone 384-byte file or embedded in a full `nvdata` partition image. No on-device logic; `live_patch.sh` (or any user script) is responsible for getting the bytes off and onto the device.
 
 The file breaks down into: a thin wrapper around `pycryptodome`'s AES-128-ECB, the MTK-specific binary format (constants, BCD, MD5-XOR checksum), and CLI plumbing.
