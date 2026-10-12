@@ -3,8 +3,8 @@ set -u
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-SCRIPT="$ROOT/live_patch_mac.sh"
-TOOL="$ROOT/mac_tool.py"
+SCRIPT="$ROOT/tools/nvram/live_patch_mac.sh"
+TOOL="$ROOT/tools/nvram/mac_tool.py"
 SAMPLES="$ROOT/tmp/wifi_bt_re"
 FAKE="$(mktemp -d)"
 

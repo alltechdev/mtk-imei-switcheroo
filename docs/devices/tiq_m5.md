@@ -1,10 +1,14 @@
 # TIQ M5 — offline analysis of pulled partitions
 
-An offline analysis of `mac_tool.py` / `live_patch_mac.sh` compatibility on the **TIQ M5** (MT6761, dual-SIM), reached from partition dumps before any live TIQ M5 device was connected. Subsequent live-device testing produced a more nuanced picture than this doc originally claimed; see [`tiq_m5_mac_live_findings.md`](tiq_m5_mac_live_findings.md) for the live results, and the [Resolution](#resolution-of-the-open-question) section here for the live-test update to the original open question. Every output reproduced in this doc is a real run; nothing is illustrative.
+> Device-specific MAC addresses are redacted. Checksums and hashes remain recorded
+> results for the original files, not for the placeholders. For restoration
+> commands, set `ORIGINAL_BT_MAC` and `ORIGINAL_WIFI_MAC` from your own originals.
 
-> **Status:** the on-disk format, the AllMap index format, the BT_Addr / WIFI signatures, and the trailer-checksum algorithm are byte-for-byte compatible with what was verified end-to-end on F21 Pro. Round-trip integrity through `mac_tool.py` is byte-clean for both standalone files and the full 64 MiB `nvdata.bin`. **Live-device confirmed end-to-end on TIQ M5**: BT MAC patching via `live_patch_mac.sh` works (file persists, daemon validates, `settings get secure bluetooth_address` reflects the patched value across reboots); WiFi MAC patching also works via `live_patch_mac.sh` after a small Android-12+-specific extra step the script performs after the file write — invalidating the cached factory WiFi MAC in `WifiConfigStore.xml`'s `wifi_sta_factory_mac_address` field, used by Android's `WifiService` to seed per-SSID MAC randomization and "use device MAC" mode. Credit for that cache-invalidation step goes to the Java port [`flipphoneguy/mtk-imei-switcheroo-app`](https://github.com/flipphoneguy/mtk-imei-switcheroo-app), which uses this repo's algorithms and primitives and added `RootRunner.syncAndroidWifiFactoryMac` in v1.0.6 ([commit](https://github.com/flipphoneguy/mtk-imei-switcheroo-app/commit/060697aae1167e3ef217bf7f58fcf867c0a79d9f)); the script's `sync_android_wifi_factory_mac` is a port of that fix back. Full live findings, ruled-out hypotheses, and the saga that led to this fix: [`tiq_m5_mac_live_findings.md`](tiq_m5_mac_live_findings.md). The offline analysis below was performed before live testing; the open-question section is preserved as it was written, with the live-test resolution stated under [Resolution](#resolution-of-the-open-question).
+An offline analysis of `mac_tool.py` / `live_patch_mac.sh` compatibility on the **TIQ M5** (MT6761, dual-SIM), reached from partition dumps before any live TIQ M5 device was connected. Subsequent live-device testing produced a more nuanced picture than this doc originally claimed; see [`tiq_m5_live_mac.md`](tiq_m5_live_mac.md) for the live results, and the [Resolution](#resolution-of-the-open-question) section here for the live-test update to the original open question. Outputs are recorded runs with device-specific addresses redacted.
 
-For the **IMEI**-side per-device analysis on TIQ M5 (live IMEI patching via this repo's `live_patch.sh`, the `_patch_all_copies` bug surfaced and fixed by this device, the bad-checksum modem behavior, and the CRLF-injection layer), see [`reverse_engineering.md` § Hardware validation (TIQ M5, dual-SIM)](reverse_engineering.md#hardware-validation-tiq-m5-dual-sim). This doc is the **MAC**-side companion.
+> **Status:** the on-disk format, the AllMap index format, the BT_Addr / WIFI signatures, and the trailer-checksum algorithm are byte-for-byte compatible with what was verified end-to-end on F21 Pro. Round-trip integrity through `mac_tool.py` is byte-clean for both standalone files and the full 64 MiB `nvdata.bin`. **Live-device confirmed end-to-end on TIQ M5**: BT MAC patching via `live_patch_mac.sh` works (file persists, daemon validates, `settings get secure bluetooth_address` reflects the patched value across reboots); WiFi MAC patching also works via `live_patch_mac.sh` after a small Android-12+-specific extra step the script performs after the file write — invalidating the cached factory WiFi MAC in `WifiConfigStore.xml`'s `wifi_sta_factory_mac_address` field, used by Android's `WifiService` to seed per-SSID MAC randomization and "use device MAC" mode. Credit for that cache-invalidation step goes to the Java port [`flipphoneguy/mtk-imei-switcheroo-app`](https://github.com/flipphoneguy/mtk-imei-switcheroo-app), which uses this repo's algorithms and primitives and added `RootRunner.syncAndroidWifiFactoryMac` in v1.0.6 ([commit](https://github.com/flipphoneguy/mtk-imei-switcheroo-app/commit/060697aae1167e3ef217bf7f58fcf867c0a79d9f)); the script's `sync_android_wifi_factory_mac` is a port of that fix back. Full live findings, ruled-out hypotheses, and the saga that led to this fix: [`tiq_m5_live_mac.md`](tiq_m5_live_mac.md). The offline analysis below was performed before live testing; the open-question section is preserved as it was written, with the live-test resolution stated under [Resolution](#resolution-of-the-open-question).
+
+For the **IMEI**-side per-device analysis on TIQ M5 (live IMEI patching via this repo's `live_patch.sh`, the `_patch_all_copies` bug surfaced and fixed by this device, the bad-checksum modem behavior, and the CRLF-injection layer), see [`imei.md` § Hardware validation (TIQ M5, dual-SIM)](../research/imei.md#hardware-validation-tiq-m5-dual-sim). This doc is the **MAC**-side companion.
 
 ## Source material
 
@@ -29,18 +33,18 @@ The five partitions relevant to this analysis are `nvdata.bin`, `nvram.bin`, `nv
 ## Step 1 — Read the records with `mac_tool.py`
 
 ```
-$ python3 mac_tool.py read tmp/tiqm5/nvdata.bin
-BT_Addr  (4 copies, first @ 0x1000000): 4e:3b:46:90:34:7c
+$ python3 tools/nvram/mac_tool.py read tmp/tiqm5/nvdata.bin
+BT_Addr  (4 copies, first @ 0x1000000): XX:XX:XX:XX:XX:XX
 WIFI MAC (4 copies, first @ 0x10001f4): 00:00:00:00:00:00
 
-$ python3 mac_tool.py read tmp/tiqm5/nvram.bin
-BT_Addr  (1 copies, first @ 0x20006): 4e:3b:46:90:34:7c
+$ python3 tools/nvram/mac_tool.py read tmp/tiqm5/nvram.bin
+BT_Addr  (1 copies, first @ 0x20006): XX:XX:XX:XX:XX:XX
 WIFI MAC (1 copies, first @ 0x201f4): 00:00:00:00:00:00
 ```
 
 The fact that the tool finds anything at all is the first cross-product confirmation: `find_bt_copies` and `find_wifi_copies` (which require the BT_Addr 16-byte trailer fingerprint at offset 6 *and* a self-consistent `aa CC` trailer where `CC` matches the F21 Pro algorithm) successfully match against TIQ M5 records. If the algorithm or signature differed, no copies would have been reported.
 
-The BT MAC `4e:3b:46:90:34:7c` is real and consistent across all 4 nvdata copies and the nvram copy. The WIFI MAC field is all-zero in every copy on this dump — flagged as the [open question](#open-question-resolved) below.
+The original BT MAC (redacted here) is consistent across all 4 nvdata copies and the nvram copy. The WIFI MAC field is all-zero in every copy on this dump — flagged as the [open question](#open-question-resolved) below.
 
 The 4 BT_Addr offsets in `nvdata.bin`:
 
@@ -60,7 +64,7 @@ These are the live ext4 file blocks plus journal/COW remnants — same pattern a
 
 ```
 $ python3 -c '
-import sys; sys.path.insert(0,".")
+import sys; sys.path.insert(0,"tools/nvram")
 from mac_tool import compute_checksum
 data = open("tmp/tiqm5/nvdata.bin","rb").read()
 bt_blob = data[0x1000000:0x1000000+440]
@@ -72,7 +76,7 @@ BT_Addr first copy: magic=0xaa, stored_cs=0x4b, computed_cs=0x4b, match=True
 WIFI    first copy: magic=0xaa, stored_cs=0x27, computed_cs=0x27, match=True
 ```
 
-`mac_tool.compute_checksum` (the position-alternating ADD-on-even / XOR-on-odd algorithm recovered by disassembling F21 Pro's `libnvram.so` — see [`wifi_bt_reverse_engineering.md`](wifi_bt_reverse_engineering.md)) produces the byte-exact stored trailer for the TIQ M5 records. Same is true for every other copy in `nvdata.bin` and `nvram.bin` (the `find_*_copies` step in Step 1 only returns copies whose `trailer_valid` predicate passes).
+`mac_tool.compute_checksum` (the position-alternating ADD-on-even / XOR-on-odd algorithm recovered by disassembling F21 Pro's `libnvram.so` — see [`wifi_bt.md`](../research/wifi_bt.md)) produces the byte-exact stored trailer for the TIQ M5 records. Same is true for every other copy in `nvdata.bin` and `nvram.bin` (the `find_*_copies` step in Step 1 only returns copies whose `trailer_valid` predicate passes).
 
 This is direct evidence the trailer algorithm is the same on TIQ M5 as on F21 Pro. If TIQ M5 used a different algorithm, the tool would either reject those copies (no `aa CC` match) or compute a different checksum value than the one stored.
 
@@ -95,21 +99,21 @@ F21 Pro inner loop (within 0x126c0–0x126f4):    M5 inner loop (within 0x16310�
 
 Same `csel ... ne` selecting between the XOR result (`w9 = cs ^ byte`) and the ADD result (`w8 = cs + byte`) based on parity, same `eor wN, wN, #0x1` toggle on the parity-tracking register, same loop counter and conditional branch back. M5's daemon's `NVM_CheckFile` therefore validates files against the exact same byte-level checksum that `mac_tool.compute_checksum` produces. (The "exclude_last_2" handling earlier in the function — which selects `size - 2` vs `size` for the loop count via `csel wN, w9, w8, ne` under `tst w21, #0x1` — is also identical between the two builds.)
 
-This independently confirms what Step 2's empirical check above already showed: `mac_tool.py write` produces files M5's daemon validates and accepts (no rollback). The Android-12+ WiFi runtime cache complication on M5 (see [`tiq_m5_mac_live_findings.md`](tiq_m5_mac_live_findings.md)) is therefore **not** a daemon-level disagreement — it is downstream of the daemon, at the Android framework level: `WifiService` caches the chipset's reported "factory MAC" in `WifiConfigStore.xml` on first boot and uses the cached value thereafter. `live_patch_mac.sh`'s `sync_android_wifi_factory_mac` step invalidates that cache; the offline + `fastboot flash nvdata` path on Android 12+ does not (no Android process at fastboot time).
+This independently confirms what Step 2's empirical check above already showed: `mac_tool.py write` produces files M5's daemon validates and accepts (no rollback). The Android-12+ WiFi runtime cache complication on M5 (see [`tiq_m5_live_mac.md`](tiq_m5_live_mac.md)) is therefore **not** a daemon-level disagreement — it is downstream of the daemon, at the Android framework level: `WifiService` caches the chipset's reported "factory MAC" in `WifiConfigStore.xml` on first boot and uses the cached value thereafter. `live_patch_mac.sh`'s `sync_android_wifi_factory_mac` step invalidates that cache; the offline + `fastboot flash nvdata` path on Android 12+ does not (no Android process at fastboot time).
 
 ## Step 3 — Round-trip identity through `mac_tool.py`
 
 To confirm the tool's read+write path leaves the file byte-identical when the MAC is patched and then patched back to the original, run the full nvdata round-trip:
 
 ```
-$ python3 mac_tool.py write tmp/tiqm5/nvdata.bin --bt 02:11:22:33:44:55 --wifi 02:11:22:33:44:66 -o /tmp/m5_nv.img
+$ python3 tools/nvram/mac_tool.py write tmp/tiqm5/nvdata.bin --bt 02:11:22:33:44:55 --wifi 02:11:22:33:44:66 -o /tmp/m5_nv.img
 Wrote /tmp/m5_nv.img: BT=02:11:22:33:44:55 (4 copies), WIFI=02:11:22:33:44:66 (4 copies)
 BT_Addr  (4 copies, first @ 0x1000000): 02:11:22:33:44:55
 WIFI MAC (4 copies, first @ 0x10001f4): 02:11:22:33:44:66
 
-$ python3 mac_tool.py write /tmp/m5_nv.img --bt 4e:3b:46:90:34:7c --wifi 00:00:00:00:00:00 -o /tmp/m5_nv_back.img
-Wrote /tmp/m5_nv_back.img: BT=4e:3b:46:90:34:7c (4 copies), WIFI=00:00:00:00:00:00 (4 copies)
-BT_Addr  (4 copies, first @ 0x1000000): 4e:3b:46:90:34:7c
+$ python3 tools/nvram/mac_tool.py write /tmp/m5_nv.img --bt "${ORIGINAL_BT_MAC:?Set ORIGINAL_BT_MAC from your own original file}" --wifi 00:00:00:00:00:00 -o /tmp/m5_nv_back.img
+Wrote /tmp/m5_nv_back.img: BT=XX:XX:XX:XX:XX:XX (4 copies), WIFI=00:00:00:00:00:00 (4 copies)
+BT_Addr  (4 copies, first @ 0x1000000): XX:XX:XX:XX:XX:XX
 WIFI MAC (4 copies, first @ 0x10001f4): 00:00:00:00:00:00
 
 $ cmp -s tmp/tiqm5/nvdata.bin /tmp/m5_nv_back.img && echo BYTE-IDENTICAL
@@ -124,13 +128,13 @@ data=open("tmp/tiqm5/nvdata.bin","rb").read()
 open("tmp/tiqm5/extracted/BT_Addr.bin","wb").write(data[0x1000000:0x1000000+440])
 open("tmp/tiqm5/extracted/WIFI.bin","wb").write(data[0x10001f4:0x10001f4+2050])'
 
-$ python3 mac_tool.py write tmp/tiqm5/extracted/BT_Addr.bin --bt 02:11:22:33:44:55 -o /tmp/m5_a.bin >/dev/null
-$ python3 mac_tool.py write /tmp/m5_a.bin --bt 4e:3b:46:90:34:7c -o /tmp/m5_b.bin >/dev/null
+$ python3 tools/nvram/mac_tool.py write tmp/tiqm5/extracted/BT_Addr.bin --bt 02:11:22:33:44:55 -o /tmp/m5_a.bin >/dev/null
+$ python3 tools/nvram/mac_tool.py write /tmp/m5_a.bin --bt "${ORIGINAL_BT_MAC:?Set ORIGINAL_BT_MAC from your own original file}" -o /tmp/m5_b.bin >/dev/null
 $ cmp -s tmp/tiqm5/extracted/BT_Addr.bin /tmp/m5_b.bin && echo BT round-trip BYTE-IDENTICAL
 BT round-trip BYTE-IDENTICAL
 
-$ python3 mac_tool.py write tmp/tiqm5/extracted/WIFI.bin --wifi 02:11:22:33:44:66 -o /tmp/m5_w_a.bin >/dev/null
-$ python3 mac_tool.py write /tmp/m5_w_a.bin --wifi 00:00:00:00:00:00 -o /tmp/m5_w_b.bin >/dev/null
+$ python3 tools/nvram/mac_tool.py write tmp/tiqm5/extracted/WIFI.bin --wifi 02:11:22:33:44:66 -o /tmp/m5_w_a.bin >/dev/null
+$ python3 tools/nvram/mac_tool.py write /tmp/m5_w_a.bin --wifi 00:00:00:00:00:00 -o /tmp/m5_w_b.bin >/dev/null
 $ cmp -s tmp/tiqm5/extracted/WIFI.bin /tmp/m5_w_b.bin && echo WIFI round-trip BYTE-IDENTICAL
 WIFI round-trip BYTE-IDENTICAL
 ```
@@ -283,7 +287,7 @@ for s in [b"NVD_IMEI", b"SST_secure", b"custom_nvram", b"SBP_IMEI_VERIFY", b"GEM
   b'GEMINI_PLUS': present
 ```
 
-TIQ M5 modem family: **MOLY.LR12A.R3.MP.V255** (MT6761 S00 build PCB01). Same MOLY release line as F21 Pro (R3 series). All the NVRAM-related modem symbols (`SST_secure`, `custom_nvram`, `SBP_IMEI_VERIFY`, `NVD_IMEI`) are present, same as F21 Pro per [`reverse_engineering.md` § Hardware validation (TIQ M5)](reverse_engineering.md#hardware-validation-tiq-m5-dual-sim) noted for the IMEI work. `GEMINI_PLUS` confirms dual-SIM.
+TIQ M5 modem family: **MOLY.LR12A.R3.MP.V255** (MT6761 S00 build PCB01). Same MOLY release line as F21 Pro (R3 series). All the NVRAM-related modem symbols (`SST_secure`, `custom_nvram`, `SBP_IMEI_VERIFY`, `NVD_IMEI`) are present, same as F21 Pro per [`imei.md` § Hardware validation (TIQ M5)](../research/imei.md#hardware-validation-tiq-m5-dual-sim) noted for the IMEI work. `GEMINI_PLUS` confirms dual-SIM.
 
 `md1img_a.bin` md5 differs from the F30 stock `md1img_a` md5 (`2ea907647a44e5c745735d7d5f324974` vs `e1f142628661ac1baaf0a9e5aae8b8e2`) — different modem build, expected.
 
@@ -340,7 +344,7 @@ Compared to the F30 stock package's modem (which we have for cross-reference): F
 
 *Recorded as written before the hardware confirmation came in. See [Resolution](#resolution-of-the-open-question) below.*
 
-In every single BT_Addr copy on the TIQ M5 dump, the MAC is the populated value `4e:3b:46:90:34:7c`. In every single WIFI copy, the MAC field at `[4:10]` is **all zeros**, and the trailer checksum is the correct value for an all-zero MAC plus the rest of the file (`aa 27`). The file is structurally well-formed; only the MAC field is unprovisioned-looking.
+In every single BT_Addr copy on the TIQ M5 dump, the MAC is the populated value `XX:XX:XX:XX:XX:XX`. In every single WIFI copy, the MAC field at `[4:10]` is **all zeros**, and the trailer checksum is the correct value for an all-zero MAC plus the rest of the file (`aa 27`). The file is structurally well-formed; only the MAC field is unprovisioned-looking.
 
 Three reads, indistinguishable from offline data:
 
@@ -352,7 +356,7 @@ The only way to disambiguate is to run on hardware: before any patch, `cat /sys/
 
 ## Resolution of the open question
 
-Live-device testing on TIQ M5 hardware (full findings: [`tiq_m5_mac_live_findings.md`](tiq_m5_mac_live_findings.md)) resolved this. Of the three reads originally flagged:
+Live-device testing on TIQ M5 hardware (full findings: [`tiq_m5_live_mac.md`](tiq_m5_live_mac.md)) resolved this. Of the three reads originally flagged:
 
 - **Read 1** (file is the unprovisioned state, APRDEB/WIFI is the runtime source): **correct** — the dump's all-zero MAC was the unprovisioned state, and the kernel WiFi driver does load the file's MAC into the wiphy at boot via `kalUpdateMACAddress` (visible in dmesg). The file IS the runtime source for the chipset's reported factory MAC.
 - **Read 2** (TIQ M5 sources its WiFi MAC from somewhere other than APCFG/APRDEB/WIFI): **excluded** — APRDEB/WIFI is the source.
@@ -373,13 +377,13 @@ Credit for spotting this and fixing it goes to the Java port [`flipphoneguy/mtk-
 ```bash
 mkdir -p tmp/tiqm5 && unzip -o pulledwithmtkclienttiqm5.zip -d tmp/tiqm5/
 
-python3 mac_tool.py read tmp/tiqm5/nvdata.bin
-python3 mac_tool.py read tmp/tiqm5/nvram.bin
+python3 tools/nvram/mac_tool.py read tmp/tiqm5/nvdata.bin
+python3 tools/nvram/mac_tool.py read tmp/tiqm5/nvram.bin
 
-python3 mac_tool.py write tmp/tiqm5/nvdata.bin \
+python3 tools/nvram/mac_tool.py write tmp/tiqm5/nvdata.bin \
     --bt 02:11:22:33:44:55 --wifi 02:11:22:33:44:66 -o /tmp/m5_nv.img
-python3 mac_tool.py write /tmp/m5_nv.img \
-    --bt 4e:3b:46:90:34:7c --wifi 00:00:00:00:00:00 -o /tmp/m5_nv_back.img
+python3 tools/nvram/mac_tool.py write /tmp/m5_nv.img \
+    --bt "${ORIGINAL_BT_MAC:?Set ORIGINAL_BT_MAC from your own original file}" --wifi 00:00:00:00:00:00 -o /tmp/m5_nv_back.img
 cmp -s tmp/tiqm5/nvdata.bin /tmp/m5_nv_back.img && echo BYTE-IDENTICAL
 ```
 

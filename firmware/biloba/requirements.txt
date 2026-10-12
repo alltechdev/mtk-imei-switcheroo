@@ -1,0 +1,2 @@
+capstone==5.0.6
+cryptography==48.0.1

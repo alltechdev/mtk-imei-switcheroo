@@ -1,5 +1,8 @@
 # `LD0B_001` binary format and crypto
 
+A valid LD0B checksum does not bypass additional firmware checks on every device.
+Biloba has a separate signed critical-data gate; see [the biloba findings](../biloba/README.md).
+
 This page documents the on-disk layout of the IMEI NVRAM file on MT67xx devices (verified against F21 Pro, F25, and TIQ M5), the encryption used to protect it, and the modem-validated checksum that gates whether a written IMEI is accepted. It's the reference an engineer would need to reimplement what `imei_tool.py` does.
 
 ## File layout
@@ -54,7 +57,7 @@ plaintext offset  size   meaning
 
 The whole 32-byte plaintext is AES-128-ECB encrypted as **two independent AES blocks** (bytes `[0:16]` and `[16:32]`). ECB is fine here because the plaintext format is fixed and the data is not repeated across blocks in any way that would leak under ECB's block-equality side channel.
 
-The 2-byte filler at `[0x08:0x0A]` is part of the checksum input but is not validated independently — the modem accepts any value there as long as the checksum at `[0x0A:0x12]` is computed over the actual bytes present. The stock nvdata image has `00 00`; `imei_tool.py` writes `FF FF` to match the convention used by other MTK IMEI tools. Both round-trip cleanly. See [`reverse_engineering.md` § MD5-XOR checksum](reverse_engineering.md#md5-xor-checksum) for the test that established this.
+The 2-byte filler at `[0x08:0x0A]` is part of the checksum input but is not validated independently — the modem accepts any value there as long as the checksum at `[0x0A:0x12]` is computed over the actual bytes present. The stock nvdata image has `00 00`; `imei_tool.py` writes `FF FF` to match the convention used by other MTK IMEI tools. Both round-trip cleanly. See [`imei.md` § MD5-XOR checksum](../research/imei.md#md5-xor-checksum) for the test that established this.
 
 ### Why 32 bytes?
 
@@ -105,7 +108,7 @@ checksum[i] = md[i] ^ md[i + 8]    for i in 0..7
 
 i.e. MD5 the 10-byte input (BCD IMEI + 2 filler bytes), then XOR-fold the 16-byte digest in half to produce 8 bytes.
 
-The hash input is **always** the full 10 bytes — the 8-byte BCD IMEI plus the 2 filler bytes at `[0x08:0x0A]`. The filler bytes themselves are not validated by the modem; what matters is that the checksum is computed over the actual filler bytes present in the block. `patch_imei` writes `pt[8] = 0xFF; pt[9] = 0xFF` (matching other MTK IMEI tools) and then hashes the full 10 bytes including those `FF FF`s. Stock nvdata stores `00 00` instead and hashes that; either round-trips cleanly. See [`reverse_engineering.md` § MD5-XOR checksum](reverse_engineering.md#md5-xor-checksum) for the input-range bisection that confirmed this.
+The hash input is **always** the full 10 bytes — the 8-byte BCD IMEI plus the 2 filler bytes at `[0x08:0x0A]`. The filler bytes themselves are not validated by the modem; what matters is that the checksum is computed over the actual filler bytes present in the block. `patch_imei` writes `pt[8] = 0xFF; pt[9] = 0xFF` (matching other MTK IMEI tools) and then hashes the full 10 bytes including those `FF FF`s. Stock nvdata stores `00 00` instead and hashes that; either round-trips cleanly. See [`imei.md` § MD5-XOR checksum](../research/imei.md#md5-xor-checksum) for the input-range bisection that confirmed this.
 
 Confirmation: a freshly-pulled `LD0B_001` from the F21 Pro decrypts to a plaintext whose `[0x0A : 0x12]` matches `MD5(plaintext[0:0x0A]) XOR-folded` exactly — regardless of whether `pt[8:10]` is `00 00` or `FF FF`.
 
@@ -201,4 +204,4 @@ On reboot, the modem reads the file, decrypts it with the same key, recomputes t
 - [MTK MOLY modem source](https://github.com/hyperion70/HSPA_MOLY.WR8.W1449.MD.WG.MP.V16) — leaked MT6592 modem source containing the `SST_Get_NVRAM_SW_Key` C implementation. Note: predates the MT67xx generation, so it does **not** contain the MD5-XOR checksum step.
 - [R0rt1z2/md1imgpy](https://github.com/R0rt1z2/md1imgpy) — used to unpack the F21 Pro's `md1img_a.bin` and confirm the key-derivation constants byte-for-byte against the live modem binary at offsets `0xEE830C` (SECOND_SEED), `0xEE832C` (KEY_CONST), `0xEE834C` (NVSW_KGEN).
 - [chuacw/WriteIMEI](https://github.com/chuacw/WriteIMEI) and 3GPP TS 23.003 — standard GSM swapped-nibble BCD encoding, identical to SIM `EF_IMSI`.
-- The MD5-XOR checksum was determined empirically through black-box testing on the F21 Pro — see [`reverse_engineering.md`](reverse_engineering.md) for the full step-by-step trace (decrypt-and-observe → MD5 hypothesis → input-range bisection → write/reboot/verify confirmation).
+- The MD5-XOR checksum was determined empirically through black-box testing on the F21 Pro — see [`imei.md`](../research/imei.md) for the full step-by-step trace (decrypt-and-observe → MD5 hypothesis → input-range bisection → write/reboot/verify confirmation).

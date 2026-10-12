@@ -1,6 +1,10 @@
 # TIQ M5 — MAC patching, live-device findings
 
-A companion to [`tiq_m5_offline_analysis.md`](tiq_m5_offline_analysis.md), this doc records what was observed running this repo's BT and WiFi MAC patching flow against a connected **TIQ M5** (MT6761, dual-SIM, Android 13 + Magisk). Every output reproduced below is from a real run; nothing is illustrative.
+> Device-specific MAC addresses are redacted. Checksums and hashes remain recorded
+> results for the original files, not for the placeholders. For restoration
+> commands, set `ORIGINAL_BT_MAC` and `ORIGINAL_WIFI_MAC` from your own originals.
+
+A companion to [`tiq_m5.md`](tiq_m5.md), this doc records what was observed running this repo's BT and WiFi MAC patching flow against a connected **TIQ M5** (MT6761, dual-SIM, Android 13 + Magisk). Outputs below are recorded runs with device-specific addresses redacted.
 
 > **Headline — RESOLVED.**
 >
@@ -28,8 +32,8 @@ A companion to [`tiq_m5_offline_analysis.md`](tiq_m5_offline_analysis.md), this 
 ## BT — verified working
 
 ```
-$ ./live_patch_mac.sh
-  Current BT_Addr : 4e:3b:46:90:34:7c
+$ ./tools/nvram/live_patch_mac.sh
+  Current BT_Addr : XX:XX:XX:XX:XX:XX
   Current WIFI MAC: ...
 Change BT MAC? [y/N] y
   New BT MAC: 02:11:22:33:44:55
@@ -168,7 +172,7 @@ This is **not a bug in `live_patch_mac.sh`**. The script writes byte-perfect fil
 2. Run the live patch with a fresh test MAC:
    ```
    cd ~/mtk-imei-switcheroo
-   ./live_patch_mac.sh
+   ./tools/nvram/live_patch_mac.sh
    # Change BT MAC? [y/N] n
    # Change WiFi MAC? [y/N] y
    # New WiFi MAC: 02:11:33:55:77:99
@@ -183,7 +187,7 @@ This is **not a bug in `live_patch_mac.sh`**. The script writes byte-perfect fil
    ```
    adb shell su -c 'dd if=/dev/block/by-name/nvdata of=/sdcard/nvdata_post.img bs=1M'
    adb pull /sdcard/nvdata_post.img tmp/
-   python3 mac_tool.py read tmp/nvdata_post.img
+   python3 tools/nvram/mac_tool.py read tmp/nvdata_post.img
    # → WIFI MAC (N copies, first @ ...): 02:11:33:55:77:99
    ```
 5. Verify the WCS cache is in sync with the file:
@@ -212,4 +216,4 @@ To reproduce the **pre-fix** state for comparison: revert `live_patch_mac.sh` to
 - **Magisk**: present; policy DB at `/data/adb/magisk.db`. Both shell uid 2000 and the app uid 10154 have `policy=2 (allow)` with identical `logging`, `notification`, and `until` fields. (The historical-section "Working hypothesis" speculated this was the differentiator. With the WCS-cache cause now identified, the Magisk policy difference is a red herring.)
 - **Android version**: 13. Both `adb exec-out` CRLF injection and `chown` on app-cache files via `su` exhibit the Android 13 + Magisk quirks documented elsewhere in this repo; they are unrelated to the WCS-cache cause.
 
-For the rest of the partition layout, the AllMap/AllFile structure, the per-record offsets, and the per-device byte comparison, see [`tiq_m5_offline_analysis.md`](tiq_m5_offline_analysis.md). For the WiFi/BT NVRAM record format and the trailer-checksum algorithm, see [`wifi_bt_reverse_engineering.md`](wifi_bt_reverse_engineering.md).
+For the rest of the partition layout, the AllMap/AllFile structure, the per-record offsets, and the per-device byte comparison, see [`tiq_m5.md`](tiq_m5.md). For the WiFi/BT NVRAM record format and the trailer-checksum algorithm, see [`wifi_bt.md`](../research/wifi_bt.md).

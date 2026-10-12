@@ -1,0 +1,25 @@
+{
+  "version": "v12",
+  "label": "V12.5.2.0.RCUMIXM modem + supplied LK dump",
+  "inputs": {
+    "md1img.img": "1dd3043e889356bd5edb9343a96fe3122dc0fae7245047e815f695902a6002ab",
+    "lk.img": "cef141e957d7300ab936b030de0aad2999b2a947ff502e4b455480d93f487028",
+    "preloader.img": "165cb58913f342e2b445d35e8e3e526ecd674b622b410e23d83a780ee64f1c99"
+  },
+  "outputs": {
+    "md1img.img": "c449b5b701e1b376c85d04df4e7a0a3f2fab9b3afc590345b6c38176a42763e6",
+    "lk.img": "b3fab4a083cd4955b7c8a8a83bc7b2d5f562d66ef6542c449952369c2f36843f"
+  },
+  "modem_patcher": "patch_is_enable.py",
+  "lk_patcher": "patch_lk_md1_policy.py",
+  "gate_range": [
+    19839104,
+    19839416
+  ],
+  "caller_range": [
+    19839496,
+    19839762
+  ],
+  "lk_policy_entry": 1188444,
+  "preloader_lk_policy_offset": 311028
+}

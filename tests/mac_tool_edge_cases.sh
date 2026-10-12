@@ -3,7 +3,7 @@ set -u
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-TOOL="$ROOT/mac_tool.py"
+TOOL="$ROOT/tools/nvram/mac_tool.py"
 
 EDGE="$ROOT/tmp/edge"
 SAMPLES="$ROOT/tmp/wifi_bt_re"

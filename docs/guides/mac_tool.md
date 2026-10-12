@@ -2,7 +2,7 @@
 
 Reads and writes the WiFi MAC and Bluetooth address inside an MTK NVRAM `BT_Addr` (440-byte) or `WIFI` (2050-byte) file — either as a standalone file or embedded in a larger partition image (e.g. an `nvram` or `nvdata` dump). No on-device logic; `live_patch_mac.sh` (or any user script) is responsible for getting the bytes off and onto the device.
 
-The file is short by design. The MTK NVRAM trailer-byte algorithm (the only non-trivial piece) is in `compute_checksum`; everything else is byte-shuffling and CLI plumbing. See [`wifi_bt_reverse_engineering.md`](wifi_bt_reverse_engineering.md) for the algorithm's provenance.
+The file is short by design. The MTK NVRAM trailer-byte algorithm (the only non-trivial piece) is in `compute_checksum`; everything else is byte-shuffling and CLI plumbing. See [`wifi_bt.md`](../research/wifi_bt.md) for the algorithm's provenance.
 
 > **Scope reminder.** `mac_tool.py` is exercised directly on partition samples from F21 Pro, F25, and TIQ M5 (round-trip identity for all three; see `tests/mac_tool_edge_cases.sh`). End-to-end hardware verification with `live_patch_mac.sh` was run on **F21 Pro** and **TIQ M5** here; F25 hardware verification is through the Java port [`flipphoneguy/mtk-imei-switcheroo-app`](https://github.com/flipphoneguy/mtk-imei-switcheroo-app) (bit-equivalent to `mac_tool.py`'s primitives and to the WCS sync), since we don't have F25 hardware on this side. The format constants below match what's on F21 Pro's `/vendor/lib64/libnvram.so`; the F25 WIFI header variant (`01 00 09 00`) is supported via `WIFI_HDR_VARIANTS`. On Android 12+ devices, the WiFi runtime additionally requires invalidating Android's cached factory WiFi MAC in `WifiConfigStore.xml` after the file write — `live_patch_mac.sh` does this; the offline + `fastboot flash` path does not (see [`live_patch_mac.md` § sync_android_wifi_factory_mac](live_patch_mac.md#sync_android_wifi_factory_macnew_mac) for the limitation).
 
@@ -43,7 +43,7 @@ TRAILER_MAGIC = 0xAA
 | `WIFI_HDR_VARIANTS` | The set of accepted 4-byte WIFI headers. Both observed values share the prefix `01 00 …. 00` and differ only in the byte at offset 2: `08` for F21 Pro / TIQ M5 / F30 stock, `09` for F25. The trailer-checksum algorithm is identical across both variants. New device families with a different byte at offset 2 should add their value to this tuple after the format is verified offline (round-trip identity test). |
 | `TRAILER_MAGIC` | The constant `0xaa` byte that prefixes the 1-byte trailer checksum. Verified by `NVM_CheckFile` in `libnvram.so`. |
 
-See [`wifi_bt_reverse_engineering.md` § File layouts](wifi_bt_reverse_engineering.md#file-layouts) for the byte-by-byte map of each file.
+See [`wifi_bt.md` § File layouts](../research/wifi_bt.md#file-layouts) for the byte-by-byte map of each file.
 
 ## Helpers
 
@@ -63,7 +63,7 @@ def compute_checksum(data):
 
 The MTK NVRAM trailer-byte algorithm: walk the file *excluding* the last 2 bytes (the trailer itself), maintain an 8-bit running checksum, **ADD** on even-indexed bytes and **XOR** on odd-indexed bytes. The trailer byte at `data[-1]` is what `data[-2]` (always `0xaa`) is followed by, and that byte must equal `compute_checksum(data) & 0xff` for the runtime `nvram_daemon`'s `NVM_CheckFile` to consider the file valid.
 
-Recovered by disassembling `_Z18NVM_ComputeCheckNoPKcPcb` in `/vendor/lib64/libnvram.so`. The Python is a direct translation of the ARM64 loop body. See [`wifi_bt_reverse_engineering.md` § Step 3 — Disassembling NVM_ComputeCheckNo](wifi_bt_reverse_engineering.md#step-3--disassembling-nvm_computecheckno) for the assembly walkthrough.
+Recovered by disassembling `_Z18NVM_ComputeCheckNoPKcPcb` in `/vendor/lib64/libnvram.so`. The Python is a direct translation of the ARM64 loop body. See [`wifi_bt.md` § Step 3 — Disassembling NVM_ComputeCheckNo](../research/wifi_bt.md#step-3--disassembling-nvm_computecheckno) for the assembly walkthrough.
 
 ### `trailer_valid(data)`
 
@@ -106,7 +106,7 @@ On the live F21 Pro `nvram` partition (BinRegion mirror, 64 MiB), each finder re
 `mac_tool.py read <file>` — auto-detects standalone vs partition-image and prints either a single line (`BT_Addr: …` or `WIFI MAC: …`) or two lines for partition images including a copy count and the first hit's offset:
 
 ```
-$ python3 mac_tool.py read live_nvram.img
+$ python3 tools/nvram/mac_tool.py read live_nvram.img
 BT_Addr  (1 copies, first @ 0x2003c): 10:df:8b:XX:YY:ZZ
 WIFI MAC (1 copies, first @ 0x201f4): 10:df:8b:UU:VV:WW
 ```
@@ -161,14 +161,14 @@ When `find_bt_copies` / `find_wifi_copies` find a signature hit but the trailer'
 ## Quick recipes
 
 ```bash
-python3 mac_tool.py read BT_Addr
-python3 mac_tool.py read WIFI
-python3 mac_tool.py read nvdata.img
+python3 tools/nvram/mac_tool.py read BT_Addr
+python3 tools/nvram/mac_tool.py read WIFI
+python3 tools/nvram/mac_tool.py read nvdata.img
 
-python3 mac_tool.py write BT_Addr --bt 02:11:22:33:44:55 -o BT_Addr.patched
-python3 mac_tool.py write WIFI    --wifi 02:11:22:33:44:66 -o WIFI.patched
+python3 tools/nvram/mac_tool.py write BT_Addr --bt 02:11:22:33:44:55 -o BT_Addr.patched
+python3 tools/nvram/mac_tool.py write WIFI    --wifi 02:11:22:33:44:66 -o WIFI.patched
 
-python3 mac_tool.py write nvdata.img --bt 02:11:22:33:44:55 \
+python3 tools/nvram/mac_tool.py write nvdata.img --bt 02:11:22:33:44:55 \
                                      --wifi 02:11:22:33:44:66 \
                                      -o nvdata_patched.img
 ```

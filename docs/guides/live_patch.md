@@ -1,6 +1,6 @@
 # `live_patch.sh` — reference
 
-Host-side bash that drives a live, rooted MTK device through ADB: pulls the encrypted IMEI file, hands it to `imei_tool.py` to rewrite, pushes it back through `su`, offers to reboot. Short and linear; the binary-format and crypto knowledge lives in `imei_tool.py`, this script is plumbing. Live-tested on F21 Pro and TIQ M5; per-device verification status lives in the top-level [README](../README.md#verification-status).
+Host-side bash that drives a live, rooted MTK device through ADB: pulls the encrypted IMEI file, hands it to `imei_tool.py` to rewrite, pushes it back through `su`, offers to reboot. Short and linear; the binary-format and crypto knowledge lives in `imei_tool.py`, this script is plumbing. Live-tested on F21 Pro and TIQ M5; per-device verification status lives in the [device validation report](../devices/validation.md#imei).
 
 ## Header
 
@@ -60,7 +60,7 @@ adb shell su -c "rm $DEVICE_TMP/$name"         # clean up staging
 
 **Three things in this function are deliberate, not noise:**
 
-1. **`</dev/null` on every adb invocation.** When `live_patch.sh` is invoked with piped stdin (`printf 'y\n…\nn\n' | ./live_patch.sh`), `adb shell` will silently consume bytes off that pipe instead of letting `read -p` see them. Routing adb's stdin to `/dev/null` keeps the prompts working.
+1. **`</dev/null` on every adb invocation.** When `live_patch.sh` is invoked with piped stdin (`printf 'y\n…\nn\n' | ./tools/nvram/live_patch.sh`), `adb shell` will silently consume bytes off that pipe instead of letting `read -p` see them. Routing adb's stdin to `/dev/null` keeps the prompts working.
 
 2. **Both `mount -o remount,rw` lines.** `/mnt/vendor/nvdata` is what we write to and is rw on the verified firmware (no-op there). `/` is included for hypothetical Magisk/SELinux configurations that route writes through the root namespace. Both have stdout and stderr discarded — failures don't kill the script; if the cp afterwards still can't write, that's where we surface the error.
 
@@ -92,7 +92,7 @@ adb shell su -c "rm $PULL_STAGE" </dev/null >/dev/null 2>&1
 
 The on-device `LD0B_001` is `system:radio`, mode `660`, so the `shell` ADB user can't read it directly. The script uses `su` to copy it to `/sdcard/LD0B_001_pull`, `chmod`s it to 644 so the shell user *can* read it, then `adb pull`s it to the host. `adb pull` uses adb's SYNC protocol — block-based, binary-safe by construction — so the 384-byte payload is preserved exactly.
 
-A simpler-looking `adb exec-out su -c "cat $IMEI_PATH" > "$BACKUP"` does work on some devices (verified historically on F21 Pro / Android 11) but on the TIQ M5 (Android 13 + Magisk) it returned 387 bytes — `\r` was injected before every `\n` in the binary stream. The cp + adb pull path sidesteps the issue by routing the binary content through the filesystem and adb's SYNC channel rather than through any `su` stdio path; verified binary-safe on F21 Pro and TIQ M5 in this configuration. See [`reverse_engineering.md` § Hardware validation (TIQ M5)](reverse_engineering.md#hardware-validation-tiq-m5-dual-sim) for the byte-level evidence.
+A simpler-looking `adb exec-out su -c "cat $IMEI_PATH" > "$BACKUP"` does work on some devices (verified historically on F21 Pro / Android 11) but on the TIQ M5 (Android 13 + Magisk) it returned 387 bytes — `\r` was injected before every `\n` in the binary stream. The cp + adb pull path sidesteps the issue by routing the binary content through the filesystem and adb's SYNC channel rather than through any `su` stdio path; verified binary-safe on F21 Pro and TIQ M5 in this configuration. See [`imei.md` § Hardware validation (TIQ M5)](../research/imei.md#hardware-validation-tiq-m5-dual-sim) for the byte-level evidence.
 
 ```bash
 file_size=$(wc -c < "$BACKUP")

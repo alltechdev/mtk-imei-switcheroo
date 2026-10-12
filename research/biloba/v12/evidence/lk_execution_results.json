@@ -1,0 +1,137 @@
+[
+  {
+    "case": "lk_original_sbc0_lock3",
+    "secure_boot": 0,
+    "lock_state": 3,
+    "expected_exit": 0,
+    "actual_exit": 0,
+    "stderr": "",
+    "actual_image_verifier_executed": false
+  },
+  {
+    "case": "lk_patched_sbc0_lock3",
+    "secure_boot": 0,
+    "lock_state": 3,
+    "expected_exit": 0,
+    "actual_exit": 0,
+    "stderr": "",
+    "actual_image_verifier_executed": false
+  },
+  {
+    "case": "preloader_sbc0_lock3",
+    "secure_boot": 0,
+    "lock_state": 3,
+    "expected_exit": 0,
+    "actual_exit": 0,
+    "stderr": "",
+    "actual_image_verifier_executed": false
+  },
+  {
+    "case": "lk_original_sbc0_lock4",
+    "secure_boot": 0,
+    "lock_state": 4,
+    "expected_exit": 0,
+    "actual_exit": 0,
+    "stderr": "",
+    "actual_image_verifier_executed": false
+  },
+  {
+    "case": "lk_patched_sbc0_lock4",
+    "secure_boot": 0,
+    "lock_state": 4,
+    "expected_exit": 0,
+    "actual_exit": 0,
+    "stderr": "",
+    "actual_image_verifier_executed": false
+  },
+  {
+    "case": "preloader_sbc0_lock4",
+    "secure_boot": 0,
+    "lock_state": 4,
+    "expected_exit": 0,
+    "actual_exit": 0,
+    "stderr": "",
+    "actual_image_verifier_executed": false
+  },
+  {
+    "case": "lk_original_sbc1_lock3",
+    "secure_boot": 1,
+    "lock_state": 3,
+    "expected_exit": 1,
+    "actual_exit": 1,
+    "stderr": "",
+    "actual_image_verifier_executed": false
+  },
+  {
+    "case": "lk_patched_sbc1_lock3",
+    "secure_boot": 1,
+    "lock_state": 3,
+    "expected_exit": 0,
+    "actual_exit": 0,
+    "stderr": "",
+    "actual_image_verifier_executed": false
+  },
+  {
+    "case": "preloader_sbc1_lock3",
+    "secure_boot": 1,
+    "lock_state": 3,
+    "expected_exit": 0,
+    "actual_exit": 0,
+    "stderr": "",
+    "actual_image_verifier_executed": false
+  },
+  {
+    "case": "lk_original_sbc1_lock4",
+    "secure_boot": 1,
+    "lock_state": 4,
+    "expected_exit": 1,
+    "actual_exit": 1,
+    "stderr": "",
+    "actual_image_verifier_executed": false
+  },
+  {
+    "case": "lk_patched_sbc1_lock4",
+    "secure_boot": 1,
+    "lock_state": 4,
+    "expected_exit": 1,
+    "actual_exit": 1,
+    "stderr": "",
+    "actual_image_verifier_executed": false
+  },
+  {
+    "case": "preloader_sbc1_lock4",
+    "secure_boot": 1,
+    "lock_state": 4,
+    "expected_exit": 1,
+    "actual_exit": 1,
+    "stderr": "",
+    "actual_image_verifier_executed": false
+  },
+  {
+    "case": "lk_original_reaches_auth",
+    "secure_boot": 1,
+    "lock_state": 3,
+    "expected_exit": 42,
+    "actual_exit": 42,
+    "stderr": "",
+    "actual_image_verifier_executed": true
+  },
+  {
+    "case": "lk_patched_skips_auth",
+    "secure_boot": 1,
+    "lock_state": 3,
+    "expected_exit": 0,
+    "actual_exit": 0,
+    "stderr": "",
+    "actual_image_verifier_executed": true
+  },
+  {
+    "case": "lk_patched_locked_reaches_auth",
+    "secure_boot": 1,
+    "lock_state": 4,
+    "expected_exit": 42,
+    "actual_exit": 42,
+    "stderr": "",
+    "actual_image_verifier_executed": true
+  }
+]

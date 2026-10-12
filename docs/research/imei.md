@@ -489,7 +489,7 @@ Every step above can be independently reproduced with:
 
 The walkthrough above was conducted on a live F21 Pro (single-SIM). The same key, slot offsets, and checksum were independently re-validated first against a stock **DuoQin F25** (dual-SIM) firmware ZIP, then live on F25 hardware via this repo's `live_patch.sh` and via the [`flipphoneguy/mtk-imei-switcheroo-app`](https://github.com/flipphoneguy/mtk-imei-switcheroo-app) Java port — patched IMEIs persist across reboot and the modem accepts the patched bytes at runtime. **F25 hardware testing is performed by the port author (also the F25 device tester); we do not have F25 hardware on this side.**
 
-For the MAC-side per-device analysis on F25 (BT_Addr / WIFI signatures, the `01 00 09 00` WIFI header variant, AllMap structure, modem family) see [`f25_offline_analysis.md`](f25_offline_analysis.md).
+For the MAC-side per-device analysis on F25 (BT_Addr / WIFI signatures, the `01 00 09 00` WIFI header variant, AllMap structure, modem family) see [`f25.md`](../devices/f25.md).
 
 ### What was checked against the F25 firmware
 
@@ -548,3 +548,28 @@ Independent end-to-end confirmation on a live **TIQ M5** (MT6761, dual-SIM):
 ### What is *not* yet checked on TIQ M5
 
 - (no remaining items — both bad-checksum behavior and the CRLF-layer question are resolved above.)
+
+---
+
+## Why IMEI patching does not persist on Helio G85 (MT6769) — community report analysis
+
+The biloba investigation is now documented separately in
+[biloba status and scope](../biloba/README.md). Its modem has an additional
+signed critical-data check beyond the LD0B checksum. This finding applies to
+the analysed firmware, not automatically to every phone with the same SoC.
+
+## Bypass path research — MT6769 modem ROM deep analysis
+
+See [decoded modem and bootloader changes](../biloba/patches.md) and
+[verification evidence](../biloba/verification.md). The earlier string-only
+pseudocode and speculative NVRAM bypass instructions have been superseded.
+The identified modem code is MIPS16, direct string references exist through
+its runtime address alias, and the original gate does compare product names.
+
+## Modem downgrade attempt — MIUI 12.5 (Redmi Note 8 2021 / biloba) — FAILED
+
+Downgrading to the unmodified MIUI 12.5 modem did not by itself remove the
+signed-data enforcement. Later, the modem-only code patch bootlooped; pairing
+it with a targeted LK policy patch was reported working by the tester.
+This is distinct from both the stock downgrade experiment and the newer V14
+pair, which remains untested on hardware. See [current status](../biloba/README.md).

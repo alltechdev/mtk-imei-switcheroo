@@ -1,5 +1,8 @@
 # `imei_tool.py` — reference
 
+A valid LD0B checksum does not bypass additional firmware checks on every device.
+Biloba has a separate signed critical-data gate; see [the biloba findings](../biloba/README.md).
+
 Reads and writes the IMEI inside an MTK NVRAM `LD0B_001` blob — either as a standalone 384-byte file or embedded in a full `nvdata` partition image. No on-device logic; `live_patch.sh` (or any user script) is responsible for getting the bytes off and onto the device.
 
 The file breaks down into: a thin wrapper around `pycryptodome`'s AES-128-ECB, the MTK-specific binary format (constants, BCD, MD5-XOR checksum), and CLI plumbing.
@@ -31,7 +34,7 @@ IMEI_BLOCK_SIZE = 32
 
 | Constant | Meaning |
 |---|---|
-| `AES_KEY` | The AES-128 key. Pre-computed; see [`format.md` § AES key derivation](format.md#aes-key-derivation). |
+| `AES_KEY` | The AES-128 key. Pre-computed; see [`imei_format.md` § AES key derivation](../reference/imei_format.md#aes-key-derivation). |
 | `LD0B_MAGIC` | First 4 bytes of any `LD0B_001` file. Validity check for standalone files. |
 | `LD0B_SIG` | First 8 bytes (magic + fixed `10 ef 0a 00`). Stricter; used to scan partition images. |
 | `LD0B_SIZE` | 384 bytes — both a validity check and the patch-and-replace stride. |
@@ -39,7 +42,7 @@ IMEI_BLOCK_SIZE = 32
 | `IMEI_BCD_SIZE` | 8 — BCD-encoded IMEI is the first 8 bytes of the decrypted block. |
 | `IMEI_BLOCK_SIZE` | 32 — two AES-128 blocks, the unit of decrypt/encrypt. |
 
-See [`format.md` § File layout](format.md#file-layout) for the byte-by-byte map.
+See [`imei_format.md` § File layout](../reference/imei_format.md#file-layout) for the byte-by-byte map.
 
 ## AES wrappers
 
@@ -56,7 +59,7 @@ return bytes(md[i] ^ md[i + 8] for i in range(8))
 
 The 8-byte checksum the modem firmware validates on every read. Algorithm: MD5 the 10-byte input, XOR-fold the digest in half (`digest[i] ^ digest[i+8]` for i in 0..7).
 
-The 10-byte input is `pt[0:10]` — the BCD IMEI (`[0:8]`) plus the 2 filler bytes at `[8:10]`. The filler bytes are hashed but not validated independently: stock nvdata holds `00 00`, `imei_tool.py` writes `FF FF`, both round-trip. See [`format.md` § MD5-XOR checksum](format.md#md5-xor-checksum) and [`reverse_engineering.md` § MD5-XOR checksum](reverse_engineering.md#md5-xor-checksum) for the input-range bisection that established this.
+The 10-byte input is `pt[0:10]` — the BCD IMEI (`[0:8]`) plus the 2 filler bytes at `[8:10]`. The filler bytes are hashed but not validated independently: stock nvdata holds `00 00`, `imei_tool.py` writes `FF FF`, both round-trip. See [`imei_format.md` § MD5-XOR checksum](../reference/imei_format.md#md5-xor-checksum) and [`imei.md` § MD5-XOR checksum](../research/imei.md#md5-xor-checksum) for the input-range bisection that established this.
 
 ## BCD encoding
 
@@ -169,7 +172,7 @@ adb pull /sdcard/nvdata.img
 adb shell su -c "rm /sdcard/nvdata.img"
 
 # Patch
-python3 imei_tool.py write nvdata.img 350859600862948 -o nvdata_patched.img
+python3 tools/nvram/imei_tool.py write nvdata.img 350859600862948 -o nvdata_patched.img
 
 # Flash
 adb reboot bootloader
