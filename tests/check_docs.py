@@ -9,7 +9,22 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def prose(text):
-    return re.sub(r'^(`{3,}|~{3,}).*?^\1[^\n]*$', '', text, flags=re.M | re.S)
+    """Exclude fenced code, including an unclosed fence through end of file."""
+    output = []
+    fence = None
+    for line in text.splitlines(keepends=True):
+        if fence is not None:
+            if re.fullmatch(r' {0,3}' + re.escape(fence[0]) +
+                            r'{' + str(len(fence)) + r',}[ \t]*', line.rstrip('\r\n')):
+                fence = None
+            continue
+        opener = re.match(r'^ {0,3}(`{3,}|~{3,})(.*)$', line.rstrip('\r\n'))
+        if opener and not (opener[1][0] == '`' and '`' in opener[2]):
+            fence = opener[1]
+            output.append('\n')
+        else:
+            output.append(line)
+    return ''.join(output)
 
 
 def anchors(text):

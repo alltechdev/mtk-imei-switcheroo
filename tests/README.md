@@ -6,7 +6,10 @@ Run commands from the repository root.
 
 ```sh
 python3 tests/check_docs.py
-bash -n tools/nvram/*.sh tests/*.sh
+python3 -m unittest discover -s tests -p 'test_check_docs.py' -v
+for file in tools/nvram/*.sh tests/*.sh; do
+  bash -n "$file" || exit 1
+done
 ```
 
 The documentation check validates local Markdown links and heading anchors.
