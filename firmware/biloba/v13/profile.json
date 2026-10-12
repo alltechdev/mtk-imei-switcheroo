@@ -1,0 +1,25 @@
+{
+  "version": "v13",
+  "label": "V13.0.10.0.SCUMIXM",
+  "inputs": {
+    "md1img.img": "8da5be62a4b3ab760348b3ec96af11bf12e5bd0eb9dea10e6efee8a4378ba361",
+    "lk.img": "ba21877452ff9ff901c72554ac9ef030293f77b7be2c10dbe64a20b866c95544",
+    "preloader.img": "56cb79b0d69a1142a62db0beee5a6251557931a2d5bf742b221eac2780582af7"
+  },
+  "outputs": {
+    "md1img.img": "7e87bc2f8ebcbbfedf8d50039882363afcad896afb055d78576be0d1e1d9c86d",
+    "lk.img": "00ea37db3953dcd01ee3e4f72e5d7a1d6835e636b5cc465fa7c67ae4b8c74f16"
+  },
+  "modem_patcher": "patch_is_enable_V13.0.10.0.py",
+  "lk_patcher": "patch_lk_md1_policy_V13.0.10.0.py",
+  "gate_range": [
+    19977984,
+    19978334
+  ],
+  "caller_range": [
+    19978500,
+    19978786
+  ],
+  "lk_policy_entry": 1188444,
+  "preloader_lk_policy_offset": 311204
+}

@@ -1,0 +1,31 @@
+{
+  "date": "2026-10-12",
+  "clean_directory_reproduction": "passed",
+  "execution_cases": 17,
+  "modem_changed_offsets": [
+    "0x130d900",
+    "0x130d901",
+    "0x130d902",
+    "0x130d903",
+    "0x130d904",
+    "0x130d905"
+  ],
+  "lk_changed_offsets": [
+    "0x122273"
+  ],
+  "raw_rom_matches_container": true,
+  "dry_run_writes_nothing": true,
+  "rejects_wrong_firmware_inplace_overwrite": true,
+  "outputs": {
+    "md1img.img": "7e87bc2f8ebcbbfedf8d50039882363afcad896afb055d78576be0d1e1d9c86d",
+    "lk.img": "00ea37db3953dcd01ee3e4f72e5d7a1d6835e636b5cc465fa7c67ae4b8c74f16"
+  },
+  "versions": {
+    "python": "3.12.3",
+    "capstone": "5.0.6",
+    "cryptography": "46.0.3",
+    "qemu-arm-static": "qemu-arm version 8.2.2 (Debian 1:8.2.2+ds-0ubuntu1.16)",
+    "qemu-mipsel-static": "qemu-mipsel version 8.2.2 (Debian 1:8.2.2+ds-0ubuntu1.16)"
+  },
+  "hardware_boot_tested": false
+}

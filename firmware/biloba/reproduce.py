@@ -114,7 +114,7 @@ def audit(work, profile, members):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--version', choices=['v12','v14'], required=True)
+    parser.add_argument('--version', choices=['v12','v13','v14'], required=True)
     parser.add_argument('--modem', type=Path, required=True)
     parser.add_argument('--lk', type=Path, required=True)
     parser.add_argument('--preloader', type=Path, required=True, help='Read-only verification input; never patched')

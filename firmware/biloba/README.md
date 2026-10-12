@@ -3,11 +3,12 @@
 | Directory | Exact supported inputs | Device result |
 | --- | --- | --- |
 | [v12](v12) | V12.5.2.0.RCUMIXM modem + supplied 4 MiB LK dump | Paired patch reported working |
+| [v13](v13) | V13.0.10.0.SCUMIXM packaged modem + LK | Offline verification only |
 | [v14](v14) | V14.0.4.0.TCUMIXM packaged modem + LK | Offline verification only |
 
 Each directory contains two standalone Python patchers and a `profile.json`
 with exact input/output fingerprints. Patchers use the standard library and
-can be attached individually. Keep the V14 identifiers in their filenames.
+can be attached individually. Keep the version identifiers in their filenames.
 
 - [Patch two files](../../docs/biloba/patchers.md)
 - [Reproduce extraction and all offline checks](../../docs/biloba/reproduce.md)

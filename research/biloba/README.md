@@ -6,8 +6,8 @@ explicit inputs; none depends on the original research workspace.
 
 | Location | Contents |
 | --- | --- |
-| `v12/`, `v14/` | MIPS caller and ARM LK/preloader execution harnesses |
-| `v12/evidence/`, `v14/evidence/` | Saved gate/caller/authentication disassembly and execution results |
+| `v12/`, `v13/`, `v14/` | MIPS caller and ARM LK/preloader execution harnesses |
+| `v12/evidence/`, `v13/evidence/`, `v14/evidence/` | Saved gate/caller/authentication disassembly and execution results |
 | `tools/mips16_subset.py` | Decoder for the MIPS16 instructions used by these functions |
 | `tools/check_signing_keys.py` | Optional supplied-key compatibility and modem-signature audit |
 | `tools/check_bootloader_archive.py` | Optional bootloader source archive public-key comparison |

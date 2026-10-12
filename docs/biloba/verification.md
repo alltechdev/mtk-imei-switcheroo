@@ -1,11 +1,11 @@
 # Biloba verification
 
 See [status](README.md) for the distinction between the reported working V12
-pair and V14's offline-only result.
+pair and V13/V14's offline-only results.
 
 ## Offline checks
 
-For both versions, input fingerprints and target bytes were checked before
+For all three versions, input fingerprints and target bytes were checked before
 editing copies. Output lengths match inputs. Exactly six modem bytes and one
 LK byte differ; all other bytes, including certificate/signature data, match.
 Patchers reject unsupported firmware, existing outputs and in-place writes.
@@ -29,7 +29,7 @@ successful cryptography. LTE/C2K flags are clear in the verifier-path tests.
 These tests establish control flow, not full boot or live hardware state.
 
 Original modem certificate signatures were checked against their embedded
-public keys. Both patched ROM digests differ from the signed values. Neither
+public keys. All three patched ROM digests differ from the signed values. Neither
 `keys.zip` nor the inspected `bootloader.zip` supplied a matching signing key.
 
 ## Remaining limits
@@ -39,7 +39,7 @@ offline. Neither the plain digest nor the known software-AES digest method
 validated it; hardware-backed methods remain untested. This does not establish
 that seccfg is invalid. Preloader can fall back to locked when state is unavailable.
 
-The old pair's reported success does not establish a V14 result, compatibility
+The old pair's reported success does not establish a V13 or V14 result, compatibility
 with another device, or long-term radio/IMEI persistence. Those require device
 testing. No device was flashed by the analysis scripts or execution harnesses.
 

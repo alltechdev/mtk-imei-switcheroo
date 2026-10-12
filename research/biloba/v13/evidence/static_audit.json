@@ -1,0 +1,37 @@
+{
+  "instruction_counts": {
+    "gate": 145,
+    "caller": 112
+  },
+  "branch_boundaries_valid": true,
+  "certificates": [
+    {
+      "member": 2,
+      "signature_valid": true
+    },
+    {
+      "member": 3,
+      "signature_valid": true
+    },
+    {
+      "member": 5,
+      "signature_valid": true
+    },
+    {
+      "member": 6,
+      "signature_valid": true
+    },
+    {
+      "member": 8,
+      "signature_valid": true
+    },
+    {
+      "member": 9,
+      "signature_valid": true
+    }
+  ],
+  "original_rom_digest": "16c97da4c6a5d8df868d9a8d68a099f5b5c100340e8b106f18e804100102fb9e",
+  "patched_rom_digest": "02daf88edebd095d58b0826cd1cc325438db103a04a91d0c38632f5746395bf2",
+  "lk_policy": "01 00 03 02",
+  "preloader_lk_policy": "01 00 03 00"
+}

@@ -1,6 +1,6 @@
 # Biloba modem/LK investigation
 
-Updated 2026-10-06. Device: Redmi Note 8 2021 (biloba, Helio G85).
+Updated 2026-10-12. Device: Redmi Note 8 2021 (biloba, Helio G85).
 This is separate from the repository's LD0B and MAC editing tools.
 
 ## Status by version
@@ -10,6 +10,7 @@ This is separate from the repository's LD0B and MAC editing tools.
 | Original V12.5.2.0.RCUMIXM modem | Reported working; stock downgrade alone did not solve IMEI rejection |
 | V12 modem-only return-zero patch | Tester reported bootloop before launcher |
 | V12 patched modem + patched supplied LK | Tester subsequently reported the pair worked |
+| V13.0.10.0.SCUMIXM patched modem + bundled LK | Offline checks passed; not boot-tested |
 | V14.0.4.0.TCUMIXM patched modem + bundled LK | Offline checks passed; not boot-tested |
 
 The paired V12 success is a user-relayed tester result. We do not have an
@@ -31,6 +32,7 @@ condition; changing LK is not a universal secure-boot bypass.
 
 ## Topics
 
+- [V13.0.10.0 findings](v13_0_10.md)
 - [Exact code changes and authentication path](patches.md)
 - [Input/output fingerprints](artifacts.md)
 - [Verification and remaining limits](verification.md)

@@ -60,6 +60,7 @@ guide for requirements and verification.
 | F25 | IMEI verified through the tester; WiFi/BT confirmed through the Java port |
 | TIQ M5 | Dual-SIM IMEI and WiFi/BT flows verified on hardware |
 | Biloba V12 modem + supplied LK | Paired firmware patch reported working; modem-only patch bootlooped |
+| Biloba V13 modem + bundled LK | Offline checks passed; no hardware result reported |
 | Biloba V14 modem + bundled LK | Offline checks passed; no hardware result reported |
 
 [Detailed validation](docs/devices/validation.md) distinguishes direct tests,

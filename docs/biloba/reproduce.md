@@ -23,8 +23,8 @@ Standalone [patchers](patchers.md) require only Python's standard library.
 Keep inputs outside the checkout, or in an ignored run directory. The V12
 modem is `md1img_global_V12.5.2.0.RCUMIXM.img`; its LK and preloader inputs
 are the supplied `lk_a,b.bin` and `preloader.emmc.boot1,2.bin` dumps.
-The V14 inputs are `firmware-update/md1img.img`, `firmware-update/lk.img`
-and `firmware-update/preloader.img` extracted from the identified V14 ZIP.
+The V13 and V14 inputs are `firmware-update/md1img.img`, `firmware-update/lk.img`
+and `firmware-update/preloader.img` extracted from the corresponding identified firmware ZIP.
 The preloader is inspected only.
 
 ## Run one version
@@ -37,6 +37,12 @@ python3 firmware/biloba/reproduce.py --version v12 \
   --lk '/path/to/lk_a,b.bin' \
   --preloader '/path/to/preloader.emmc.boot1,2.bin' \
   --output runs/v12
+
+python3 firmware/biloba/reproduce.py --version v13 \
+  --modem /path/to/v13/firmware-update/md1img.img \
+  --lk /path/to/v13/firmware-update/lk.img \
+  --preloader /path/to/v13/firmware-update/preloader.img \
+  --output runs/v13
 
 python3 firmware/biloba/reproduce.py --version v14 \
   --modem /path/to/firmware-update/md1img.img \
@@ -66,7 +72,7 @@ and runs two MIPS caller cases plus 15 ARM policy/verifier cases.
 | `inputs/`, `members/` | Local input copies and extracted modem members |
 
 A passing run reproduces the established bytes and isolated tests. V12's paired
-patch was reported working by the tester; V14 has no reported boot test.
+patch was reported working by the tester; V13 and V14 have no reported boot test.
 See [remaining limits](verification.md) before interpreting these results.
 
 ## Optional local audits

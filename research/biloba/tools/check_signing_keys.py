@@ -94,7 +94,7 @@ def main():
     groups, skipped = load_archive_keys(archive)
     manifest = json.loads((ROOT/'members/manifest.json').read_text())
     image = (ROOT/'inputs/md1img.img').read_bytes()
-    if digest(image) not in ['1dd3043e889356bd5edb9343a96fe3122dc0fae7245047e815f695902a6002ab', '4077b7aa2b0d7eb1f0c51cde274fb2053e90e66e64134765410a74d1d01442fc']:
+    if digest(image) not in ['8da5be62a4b3ab760348b3ec96af11bf12e5bd0eb9dea10e6efee8a4378ba361', '1dd3043e889356bd5edb9343a96fe3122dc0fae7245047e815f695902a6002ab', '4077b7aa2b0d7eb1f0c51cde274fb2053e90e66e64134765410a74d1d01442fc']:
         raise ValueError('Original image hash mismatch')
     results = []
     for member in manifest:
